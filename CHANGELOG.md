@@ -2,6 +2,23 @@
 
 Alle noemenswaardige wijzigingen. Formaat: [Keep a Changelog](https://keepachangelog.com/nl/1.1.0/), versies volgens [SemVer](https://semver.org/lang/nl/).
 
+## [0.1.2] - 2026-11-18
+
+Ronde A van de codebase review (CR-01 t/m CR-05, CR-09, CR-10).
+
+### Gewijzigd
+- Een gewijzigd antwoordformaat van Autoweek geeft een duidelijke `CarbaseError` in plaats van een kale `KeyError` (CR-01).
+- Onbekend merk of model: melding met verwijzing naar `list_brands` / `list_models` (CR-04).
+- `get_specs`/`compare_versions` met een onbekende sectienaam: fout met de beschikbare secties (CR-05).
+- `search` met `name_contains` meldt `complete` als het maximum van 20 pagina's is bereikt (CR-03).
+- Serverinstructie: data vanaf de jaren zeventig (CR-10).
+
+### Opgelost
+- `name_contains` struikelde over een uitvoering zonder naam (CR-02).
+
+### Tests
+- Offline tests voor `search` (URL-parameters, paginering), `list_models` en de foutvertaling (CR-09); 27 tests.
+
 ## [0.1.1] - 2026-11-18
 
 ### Gewijzigd

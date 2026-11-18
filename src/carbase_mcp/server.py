@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from typing import Annotated, Any, Literal
 
 from mcp.server.fastmcp import FastMCP
 from pydantic import Field
 
 from . import __version__, parse
-from .client import CarbaseClient, CarbaseError
+from .client import CarbaseClient, CarbaseError, NotFoundError
 
 # Carbase filter key (as in the JSON "filters_new") -> URL parameter name, taken from
 # Autoweek's search-client bundle. Keys not listed here are internal and not exposed.
@@ -50,7 +51,7 @@ MAX_PAGES = 20
 mcp = FastMCP(
     "carbase",
     instructions=(
-        "Autoweek Carbase: Dutch catalogue of ~100,000 car versions (uitvoeringen) since the 1990s "
+        "Autoweek Carbase: Dutch catalogue of ~100,000 car versions (uitvoeringen) since the 1970s "
         "with Dutch list prices (euro, incl. VAT/BPM) and full specifications with Dutch labels. "
         "Flow: list_brands/list_models -> search (brand, model and/or filters; see list_filters) "
         "-> get_specs(version_id) or compare_versions(ids). Data comes from Autoweek as-is and "
@@ -95,21 +96,32 @@ def _entry(item: dict) -> dict:
     return {"slug": item["slug"], "name": item["name"], "versions": item.get("amount")}
 
 
-async def _state(path: str, params: dict[str, str] | None = None) -> dict:
-    raw = await client.get(path, {**(params or {}), "format": "json"})
+def _parse[T](fn: Callable[..., T], *args: Any) -> T:
+    """Run a parser; a changed Autoweek format becomes a clear CarbaseError."""
     try:
-        return parse.search_state(raw)
-    except (ValueError, KeyError, IndexError) as exc:
-        raise CarbaseError(f"Unexpected response from Autoweek for {path}") from exc
+        return fn(*args)
+    except (KeyError, TypeError, AttributeError, IndexError, ValueError) as exc:
+        raise CarbaseError("Unexpected response format from Autoweek; the site may have changed") from exc
+
+
+async def _state(path: str, params: dict[str, str] | None = None) -> dict:
+    try:
+        raw = await client.get(path, {**(params or {}), "format": "json"})
+    except NotFoundError:
+        raise ValueError(f"Unknown brand or model in {path}; use list_brands / list_models") from None
+    return _parse(parse.search_state, raw)
 
 
 async def _specs(version_id: int, sections: list[str] | None) -> dict:
-    data = parse.specs_page(await client.get(f"/auto/{version_id}/x/"))
+    data = _parse(parse.specs_page, await client.get(f"/auto/{version_id}/x/"))
     if not data["specs"]:
         raise CarbaseError(f"No specifications found for version {version_id}")
     if sections:
         wanted = {s.lower() for s in sections}
-        data["specs"] = {k: v for k, v in data["specs"].items() if k.lower() in wanted}
+        kept = {k: v for k, v in data["specs"].items() if k.lower() in wanted}
+        if not kept:
+            raise ValueError(f"No such section(s) {sections}; available: {list(data['specs'])}")
+        data["specs"] = kept
     return {"id": version_id, **data}
 
 
@@ -121,17 +133,15 @@ Sections = Annotated[list[str] | None, Field(description="Section names to keep,
 @mcp.tool()
 async def list_brands() -> list[dict]:
     """All brands in Carbase: slug, name and number of versions."""
-    return [_entry(m) for m in parse.makes(await _state("/carbase/"))]
+    return [_entry(m) for m in _parse(parse.makes, await _state("/carbase/"))]
 
 
 @mcp.tool()
 async def list_models(brand: Brand) -> list[dict]:
     """All models of a brand: slug, name and number of versions."""
     slug = _slug(brand, "brand")
-    for m in parse.makes(await _state(_path(slug, None))):
-        if m["slug"] == slug:
-            return [_entry(x) for x in m.get("models", [])]
-    raise ValueError(f"Unknown brand {brand!r}; call list_brands for valid slugs")
+    makes = _parse(parse.makes, await _state(_path(slug, None)))
+    return [_entry(x) for m in makes if m["slug"] == slug for x in m.get("models", [])]
 
 
 @mcp.tool()
@@ -143,7 +153,7 @@ async def list_filters(brand: Brand | None = None, model: Model = None) -> list[
     entrylevel (instaphoogte), segment, price, year, power_hp, elekactieradius (km),
     min_trunkspace (l), maxweight_trailer_brakes (kg).
     """
-    return parse.filters(await _state(_path(brand, model)), FILTER_PARAMS)
+    return _parse(parse.filters, await _state(_path(brand, model)), FILTER_PARAMS)
 
 
 @mcp.tool()
@@ -162,7 +172,7 @@ async def search(
       e.g. {"fuel_type": ["elektrisch", "elektro-benzine"], "body": "suv",
             "price": {"max": 40000}, "year": {"min": 2022}}
     name_contains: keep only versions whose name contains all these words ("1.5 tsi");
-      scans all result pages instead of one.
+      scans up to 20 result pages instead of one, so combine it with brand/model or filters.
     page: 20 model generations per page.
 
     Returns model generations (model, body, years, price range), each with its matching
@@ -180,21 +190,24 @@ async def search(
             "total_versions": state.get("total_amount"),
             "page": page,
             "pages": state.get("pages"),
-            "generations": parse.generations(state),
+            "generations": _parse(parse.generations, state),
         }
     words = name_contains.lower().split()
     found: list[dict] = []
+    pages = 0
     for p in range(1, MAX_PAGES + 1):
         state = await _state(path, params | {"pagina": str(p)})
-        for gen in parse.generations(state):
+        for gen in _parse(parse.generations, state):
             gen["versions"] = [v for v in gen["versions"] if all(w in v["name"].lower() for w in words)]
             if gen["versions"]:
                 found.append(gen)
-        if p >= (state.get("pages") or 0):
+        pages = state.get("pages") or 0
+        if p >= pages:
             break
     return {
         "name_contains": name_contains,
         "matches": sum(len(g["versions"]) for g in found),
+        "complete": pages <= MAX_PAGES,
         "generations": found,
     }
 

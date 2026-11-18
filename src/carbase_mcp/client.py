@@ -28,6 +28,10 @@ class CarbaseError(RuntimeError):
     """Upstream failure that should be reported to the MCP client."""
 
 
+class NotFoundError(CarbaseError):
+    """Autoweek answered 404."""
+
+
 class CarbaseClient:
     def __init__(self, http: httpx.AsyncClient | None = None) -> None:
         self._http = http or httpx.AsyncClient(
@@ -72,7 +76,7 @@ class CarbaseClient:
                 if host != HOST:
                     raise CarbaseError(f"Unexpected redirect to {host}")
                 if resp.status_code == 404:
-                    raise CarbaseError(f"Not found on Autoweek: {path}")
+                    raise NotFoundError(f"Not found on Autoweek: {path}")
                 resp.raise_for_status()
                 chunks, size = [], 0
                 async for chunk in resp.aiter_bytes():

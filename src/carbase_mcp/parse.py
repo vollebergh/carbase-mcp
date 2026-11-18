@@ -65,7 +65,7 @@ def generations(state: dict) -> list[dict]:
             "versions": [
                 {
                     "id": v["id"],
-                    "name": v.get("name"),
+                    "name": v.get("name") or "",
                     "years": _years(v.get("start"), v.get("end")),
                     "fuel": _value(v.get("fuel_type")),
                     "transmission": _value(v.get("transmission")),
