@@ -44,8 +44,31 @@ async def test_foreign_redirect_is_refused():
             return httpx.Response(302, headers={"location": "https://evil.example/"})
         return httpx.Response(200, text="x")
 
-    with pytest.raises(CarbaseError, match="Unexpected redirect"):
+    with pytest.raises(CarbaseError, match=r"Blocked request to https://evil\.example"):
         await make(handler).get("/auto/1/x/")
+
+
+async def test_redirect_hops_are_checked_before_the_request():  # S-01
+    requested = []
+
+    def handler(request):
+        requested.append(request.url.host)
+        if request.url.host == "www.autoweek.nl":
+            # internal host halfway a redirect chain that would end on autoweek again
+            return httpx.Response(302, headers={"location": "http://169.254.169.254/latest"})
+        return httpx.Response(302, headers={"location": "https://www.autoweek.nl/ok"})
+
+    with pytest.raises(CarbaseError, match="Blocked"):
+        await make(handler).get("/carbase/")
+    assert requested == ["www.autoweek.nl"]
+
+
+async def test_cache_is_bounded_in_size(monkeypatch):  # S-02
+    monkeypatch.setattr(client_mod, "CACHE_CHARS", 25)
+    c = make(lambda r: httpx.Response(200, text="x" * 10))
+    for i in range(5):
+        await c.get(f"/p{i}")
+    assert list(c._cache) == ["/p3", "/p4"] and c._cached_chars == 20
 
 
 async def test_size_cap(monkeypatch):

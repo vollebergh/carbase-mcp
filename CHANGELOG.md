@@ -2,6 +2,14 @@
 
 Alle noemenswaardige wijzigingen. Formaat: [Keep a Changelog](https://keepachangelog.com/nl/1.1.0/), versies volgens [SemVer](https://semver.org/lang/nl/).
 
+## [0.1.3] - 2026-11-18
+
+Ronde S van de security review.
+
+### Beveiliging
+- Elke uitgaande request, ook elke redirect-stap, mag alleen via https naar `www.autoweek.nl` of `myprivacy.dpgmedia.nl` (S-01, CWE-918).
+- De cache is ook begrensd op omvang (50 M tekens) (S-02, CWE-770).
+
 ## [0.1.2] - 2026-11-18
 
 Ronde A van de codebase review (CR-01 t/m CR-05, CR-09, CR-10).
