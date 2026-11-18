@@ -2,6 +2,12 @@
 
 Alle noemenswaardige wijzigingen. Formaat: [Keep a Changelog](https://keepachangelog.com/nl/1.1.0/), versies volgens [SemVer](https://semver.org/lang/nl/).
 
+## [0.1.4] - 2026-11-18
+
+### Gewijzigd
+- `get_specs` en `compare_versions` gebruiken de echte URL van een uitvoering als die in een eerdere zoekopdracht voorbijkwam (hoogstens 20.000 onthouden). Dat scheelt per uitvoering een redirect en een verzoek naar Autoweek. Onbekende id's gaan nog via `/auto/{id}/x/`.
+- URL's uit het antwoord van Autoweek worden alleen overgenomen als ze precies `/auto/{id}/{slug}/` zijn, met hetzelfde id.
+
 ## [0.1.3] - 2026-11-18
 
 Ronde S van de security review.

@@ -47,6 +47,7 @@ FILTER_PARAMS = {
 SLUG = re.compile(r"^[a-z0-9]+(?:-+[a-z0-9]+)*-?$")
 SORT = {"make_model": "merkmodel", "price": "prijs", "year": "bouwjaar", "power": "vermogen"}
 MAX_PAGES = 20
+MAX_URLS = 20_000  # remembered version URLs (~100 bytes each)
 
 mcp = FastMCP(
     "carbase",
@@ -59,6 +60,9 @@ mcp = FastMCP(
     ),
 )
 client = CarbaseClient()
+# Canonical version paths seen in search results. Requesting /auto/{id}/x/ also works but costs
+# an extra redirect round trip to Autoweek.
+_urls: dict[int, str] = {}
 
 
 def _slug(value: str, what: str) -> str:
@@ -109,11 +113,15 @@ async def _state(path: str, params: dict[str, str] | None = None) -> dict:
         raw = await client.get(path, {**(params or {}), "format": "json"})
     except NotFoundError:
         raise ValueError(f"Unknown brand or model in {path}; use list_brands / list_models") from None
-    return _parse(parse.search_state, raw)
+    state = _parse(parse.search_state, raw)
+    _urls.update(_parse(parse.version_urls, state))
+    while len(_urls) > MAX_URLS:
+        del _urls[next(iter(_urls))]
+    return state
 
 
 async def _specs(version_id: int, sections: list[str] | None) -> dict:
-    data = _parse(parse.specs_page, await client.get(f"/auto/{version_id}/x/"))
+    data = _parse(parse.specs_page, await client.get(_urls.get(version_id, f"/auto/{version_id}/x/")))
     if not data["specs"]:
         raise CarbaseError(f"No specifications found for version {version_id}")
     if sections:

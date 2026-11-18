@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Collection
 from html.parser import HTMLParser
 from typing import Any
+
+AUTO_URL = re.compile(r"/auto/\d+/[a-z0-9]+(?:-[a-z0-9]+)*/")
 
 
 def search_state(raw: str) -> dict[str, Any]:
@@ -50,6 +53,17 @@ def _years(start: int | None, end: int | None) -> str | None:
 
 def _value(field: Any) -> Any:
     return field.get("value") if isinstance(field, dict) else field
+
+
+def version_urls(state: dict) -> dict[int, str]:
+    """Canonical /auto/{id}/{slug}/ path per version id; anything else is ignored."""
+    urls = {}
+    for r in state.get("result") or []:
+        for v in r.get("versions") or []:
+            url, vid = v.get("url"), v.get("id")
+            if isinstance(url, str) and AUTO_URL.fullmatch(url) and url.startswith(f"/auto/{vid}/"):
+                urls[vid] = url
+    return urls
 
 
 def generations(state: dict) -> list[dict]:

@@ -30,7 +30,7 @@ Voorbeeldvragen aan het model:
 Je hebt [uv](https://docs.astral.sh/uv/) nodig. Er zijn geen API-sleutels nodig.
 
 ```bash
-claude mcp add --scope user carbase -- uvx --from git+https://github.com/vollebergh/carbase-mcp@v0.1.3 carbase-mcp
+claude mcp add --scope user carbase -- uvx --from git+https://github.com/vollebergh/carbase-mcp@v0.1.4 carbase-mcp
 ```
 
 Of in de configuratie van een andere MCP-client:
@@ -38,7 +38,7 @@ Of in de configuratie van een andere MCP-client:
 ```json
 "carbase": {
   "command": "uvx",
-  "args": ["--from", "git+https://github.com/vollebergh/carbase-mcp@v0.1.3", "carbase-mcp"]
+  "args": ["--from", "git+https://github.com/vollebergh/carbase-mcp@v0.1.4", "carbase-mcp"]
 }
 ```
 

@@ -91,6 +91,7 @@ def fake_get(monkeypatch):
         return body if isinstance(body, str) else json.dumps([body])
 
     monkeypatch.setattr(server.client, "get", get)
+    monkeypatch.setattr(server, "_urls", {})
     return responses, seen
 
 
@@ -155,3 +156,25 @@ async def test_unknown_section_lists_available(fake_get):  # CR-05
     with pytest.raises(ValueError, match="PRESTATIES"):
         await server.get_specs(7, ["Interieur maten"])
     assert (await server.get_specs(7, ["prestaties"]))["specs"] == {"PRESTATIES": {"a": "b"}}
+
+
+SPEC = '<section class="table-description"><h3>A</h3><table><tr><td>a</td><td>b</td></tr></table></section>'
+
+
+async def test_get_specs_uses_url_from_search(fake_get):
+    responses, seen = fake_get
+    responses["/carbase/"] = _state(1, [{"id": 9, "name": "x", "url": "/auto/9/real-slug/"}])
+    responses["/auto/9/real-slug/"] = SPEC
+    responses["/auto/10/x/"] = SPEC
+    await server.search()
+    await server.get_specs(9)
+    await server.get_specs(10)  # never seen in a search: slug-less fallback
+    assert [p for p, _ in seen[1:]] == ["/auto/9/real-slug/", "/auto/10/x/"]
+
+
+async def test_remembered_urls_are_bounded(fake_get, monkeypatch):
+    monkeypatch.setattr(server, "MAX_URLS", 2)
+    versions = [{"id": i, "name": "x", "url": f"/auto/{i}/s/"} for i in range(1, 5)]
+    fake_get[0]["/carbase/"] = _state(1, versions)
+    await server.search()
+    assert server._urls == {3: "/auto/3/s/", 4: "/auto/4/s/"}

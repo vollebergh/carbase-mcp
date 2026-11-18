@@ -121,3 +121,18 @@ def test_specs_page():
         },
         "GEWICHTEN": {"gewicht leeg": "1.204 kg"},
     }
+
+
+def test_version_urls_accepts_only_matching_auto_paths():
+    from carbase_mcp.parse import version_urls
+
+    versions = [
+        {"id": 1, "url": "/auto/1/vw-golf-1-5-tsi/"},
+        {"id": 2, "url": "/auto/3/other-car/"},  # id mismatch
+        {"id": 4, "url": "https://evil.example/auto/4/x/"},  # absolute URL
+        {"id": 5, "url": "/auto/5/../../admin/"},  # traversal
+        {"id": 6, "url": "/auto/6/x/?a=b"},  # query string
+        {"id": 7},  # no url
+        {"id": 8, "url": "/auto/80/x/"},  # prefix of another id
+    ]
+    assert version_urls({"result": [{"versions": versions}]}) == {1: "/auto/1/vw-golf-1-5-tsi/"}
