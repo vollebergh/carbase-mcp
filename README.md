@@ -11,7 +11,7 @@ MCP-server die de [Autoweek Carbase](https://www.autoweek.nl/carbase/) doorzoekb
 | `list_brands` | alle merken (slug, naam, aantal uitvoeringen) |
 | `list_models(brand)` | alle modellen van een merk |
 | `list_filters(brand?, model?)` | beschikbare zoekfilters met opties en aantallen, of bereikstappen |
-| `search(brand?, model?, filters?, name_contains?, sort, descending, page)` | modelgeneraties met hun uitvoeringen: id, naam, bouwjaren, brandstof, transmissie, energielabel, nieuwprijs, bijtelling |
+| `search(brand?, model?, filters?, name_contains?, sort, descending, max_versions, cursor?)` | modelgeneraties met hun uitvoeringen (standaard hoogstens 100, verder bladeren met een cursor): id, naam, bouwjaren, brandstof, transmissie, energielabel, nieuwprijs, bijtelling |
 | `get_specs(version_id, sections?)` | alle specificaties van één uitvoering (± 190 velden in 16 secties: prijzen, motor, prestaties, WLTP-verbruik, gewichten, maten, instaphoogte, bagageruimte, veiligheid, uitrusting, garantie, historische prijzen) |
 | `compare_versions(version_ids, sections?, only_differences)` | 2–5 uitvoeringen naast elkaar, standaard alleen de verschillen |
 
@@ -28,9 +28,12 @@ De filters zijn die van de Carbase zelf, onder andere:
 |---|---|
 | `brand`, `model` | slugs uit `list_brands` en `list_models`, bijvoorbeeld `toyota` en `rav4`; `model` vraagt een `brand` |
 | `filters` | object met filtersleutel → optie of bereik. Opties: een waarde of lijst (`{"fuel_type": ["elektrisch", "waterstof"]}`; een lijst is OF). Bereiken: `{"min": x, "max": y}`, ieder deel optioneel (`{"price": {"max": 45000}}`). Meerdere filters zijn EN |
-| `name_contains` | woorden die allemaal in de uitvoeringsnaam moeten staan (`"1.5 tsi life"`); doorzoekt hoogstens 20 pagina's, combineer met merk, model of filters |
-| `sort` / `descending` | `make_model` (standaard), `price`, `year` of `power` |
-| `page` | 20 modelgeneraties per pagina |
+| `name_contains` | woorden die allemaal in de uitvoeringsnaam moeten staan (`"1.5 tsi life"`) |
+| `sort` / `descending` | `make_model` (standaard), `price`, `year` of `power`. Sorteert de modelgeneraties (bij `price` op hun goedkoopste uitvoering) en bij `price` ook de uitvoeringen binnen een generatie; het is geen ranglijst over alle uitvoeringen |
+| `max_versions` | hoeveel uitvoeringen per antwoord, 1–500, standaard 100 |
+| `cursor` | `next_cursor` uit het vorige antwoord, om met dezelfde argumenten verder te gaan |
+
+Het antwoord geeft `total_versions` (het aantal volgens Carbase, vóór `name_contains`), `returned`, `next_cursor` (leeg als er niets meer is) en bij meer resultaten een `hint`. Verder bladeren kost geen extra verzoeken naar Autoweek als de pagina's al in de cache staan. Per aanroep worden hoogstens 20 Carbase-pagina's gelezen; ook dan geeft het antwoord een `next_cursor`.
 
 Welke sleutels en waarden er zijn, geeft `list_filters` (met aantallen). De belangrijkste sleutels: `fuel_type`, `body`, `transmission`, `wheeldrive`, `seat_count`, `door_count`, `segment`, `energy_rating`, `plugin_car`, `entrylevel` (instaphoogte: `1-580`, `581-680`, `681-` in mm) en bereiken `price`, `year`, `power_hp`, `elekactieradius`, `batterycapacity`, `min_trunkspace`, `maxweight_trailer_brakes`, `mass`, `length`, `topspeed`, `acceleration`, `consumption_combined`, `co2emission`. Bereiken nemen willekeurige getallen, niet alleen de stappen uit `list_filters`. Een onbekende optiewaarde geeft geen fout maar een leeg resultaat.
 
@@ -56,7 +59,7 @@ Je hebt [uv](https://docs.astral.sh/uv/) nodig (of pip, zie onder). Er zijn geen
 ### Claude Code
 
 ```bash
-claude mcp add --scope user carbase -- uvx --from git+https://github.com/vollebergh/carbase-mcp@v0.2.0 carbase-mcp
+claude mcp add --scope user carbase -- uvx --from git+https://github.com/vollebergh/carbase-mcp@v0.3.0 carbase-mcp
 ```
 
 `--scope user` maakt hem beschikbaar in al je projecten; zonder de optie geldt hij alleen voor de huidige map. Start daarna een nieuwe sessie: de tools worden bij het starten van een sessie geladen.
@@ -69,7 +72,7 @@ claude mcp remove carbase    # verwijderen (bij bijwerken: eerst verwijderen, da
 Instellingen meegeven (zie [Cache op schijf](#hoe-het-werkt)), bijvoorbeeld de cache uitzetten:
 
 ```bash
-claude mcp add --scope user carbase -e CARBASE_MCP_CACHE_MB=0 -- uvx --from git+https://github.com/vollebergh/carbase-mcp@v0.2.0 carbase-mcp
+claude mcp add --scope user carbase -e CARBASE_MCP_CACHE_MB=0 -- uvx --from git+https://github.com/vollebergh/carbase-mcp@v0.3.0 carbase-mcp
 ```
 
 ### Andere MCP-clients
@@ -77,7 +80,7 @@ claude mcp add --scope user carbase -e CARBASE_MCP_CACHE_MB=0 -- uvx --from git+
 ```json
 "carbase": {
   "command": "uvx",
-  "args": ["--from", "git+https://github.com/vollebergh/carbase-mcp@v0.2.0", "carbase-mcp"],
+  "args": ["--from", "git+https://github.com/vollebergh/carbase-mcp@v0.3.0", "carbase-mcp"],
   "env": { "CARBASE_MCP_CACHE_MB": "100" }
 }
 ```
@@ -91,7 +94,7 @@ Pin op een tag, zodat er niet ongemerkt nieuwe code binnenkomt.
 Uit een gebouwde wheel (zie *Ontwikkelen*) of een kloon van de repo:
 
 ```bash
-pip install builds/carbase_mcp-0.2.0-py3-none-any.whl   # of: pip install .
+pip install builds/carbase_mcp-0.3.0-py3-none-any.whl   # of: pip install .
 carbase-mcp                                              # start de stdio-server
 ```
 
@@ -119,7 +122,7 @@ Dan is `"command": "carbase-mcp"` (zonder `args`) genoeg in de clientconfigurati
 
 ## Goed om te weten
 
-- **Houd zoekopdrachten smal.** `search` geeft alle uitvoeringen van 20 modelgeneraties per pagina. Een brede vraag als alleen `volkswagen` + `golf` levert ± 1.070 uitvoeringen op (220 kB, ± 55.000 tokens); met een filter of `name_contains` is het enkele kilobytes. Zie [llms.txt](llms.txt).
+- **Houd zoekopdrachten smal.** Alleen `volkswagen` + `golf` heeft 1.874 uitvoeringen. `search` geeft er standaard 100 (± 21 kB, ± 5.000 tokens) met een `next_cursor`; alles zou ± 220 kB zijn. Met een filter of `name_contains` blijft het meestal bij enkele kilobytes. Zie [llms.txt](llms.txt).
 - De data komt zoals Autoweek hem levert. Er zitten gaten en soms invoerfouten in; een voorbeeld is een instaphoogte van 43 cm bij een Subaru Outback.
 - Je zoekvragen gaan naar Autoweek/DPG Media, net als bij gewoon gebruik van de website. Ze staan ook in de cache op schijf (tot 30 dagen); zet `CARBASE_MCP_CACHE_MB=0` als je dat niet wilt.
 - Prijzen in de cache kunnen tot een week oud zijn (modellijst) of een dag (zoekresultaten).

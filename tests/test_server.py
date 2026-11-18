@@ -112,27 +112,72 @@ async def test_search_builds_url_params(fake_get):
 
 async def test_default_search_shares_cache_key_with_list_models(fake_get):
     responses, seen = fake_get
-    responses["/carbase/vw/"] = _state(2, [], [{"slug": "vw", "name": "VW", "models": []}])
+    responses["/carbase/vw/"] = _state(1, [], [{"slug": "vw", "name": "VW", "models": []}])
     await server.list_models("vw")
     await server.search("vw")
-    await server.search("vw", page=2)
-    assert [p for _, p in seen] == [{"format": "json"}, {"format": "json"}, {"pagina": "2", "format": "json"}]
+    assert [p for _, p in seen] == [{"format": "json"}, {"format": "json"}]
 
 
-async def test_name_contains_scans_pages_and_tolerates_empty_names(fake_get):  # CR-02, CR-03
+def _v(i, name="x", price=None):
+    return {"id": i, "name": name, "price_new": price}
+
+
+def _ids(out):
+    return [v["id"] for g in out["generations"] for v in g["versions"]]
+
+
+async def test_name_contains_scans_pages_and_tolerates_empty_names(fake_get):  # CR-02
     responses, seen = fake_get
-    responses["/carbase/vw/golf/#1"] = _state(2, [{"id": 1, "name": "Golf 1.5 TSI"}, {"id": 2, "name": None}])
-    responses["/carbase/vw/golf/#2"] = _state(2, [{"id": 3, "name": "Golf 1.5 tsi Life"}, {"id": 4}])
+    responses["/carbase/vw/golf/#1"] = _state(2, [_v(1, "Golf 1.5 TSI"), {"id": 2, "name": None}])
+    responses["/carbase/vw/golf/#2"] = _state(2, [_v(3, "Golf 1.5 tsi Life"), {"id": 4}])
     out = await server.search("vw", "golf", name_contains="1.5 TSI")
-    assert [v["id"] for g in out["generations"] for v in g["versions"]] == [1, 3]
-    assert out["matches"] == 2 and out["complete"] is True
-    assert len(seen) == 2
+    assert _ids(out) == [1, 3] and out["returned"] == 2 and out["next_cursor"] is None
+    assert "hint" not in out and len(seen) == 2
 
 
-async def test_name_contains_reports_incomplete(fake_get, monkeypatch):  # CR-03
-    monkeypatch.setattr(server, "MAX_PAGES", 1)
-    fake_get[0]["/carbase/"] = _state(5, [{"id": 1, "name": "x"}])
-    assert (await server.search(name_contains="x"))["complete"] is False
+async def test_truncation_and_cursor_within_a_page(fake_get):  # B-17
+    fake_get[0]["/carbase/"] = _state(1, [_v(i) for i in range(1, 6)])
+    first = await server.search(max_versions=2)
+    assert _ids(first) == [1, 2] and first["next_cursor"] == "1:2" and "cursor='1:2'" in first["hint"]
+    second = await server.search(max_versions=2, cursor=first["next_cursor"])
+    assert _ids(second) == [3, 4] and second["next_cursor"] == "1:4"
+    last = await server.search(max_versions=2, cursor=second["next_cursor"])
+    assert _ids(last) == [5] and last["next_cursor"] is None
+    assert last["total_versions"] == 5
+
+
+async def test_cursor_across_page_boundary_reads_no_earlier_pages(fake_get):  # B-17
+    responses, seen = fake_get
+    responses["/carbase/#1"] = _state(3, [_v(1), _v(2)])
+    responses["/carbase/#2"] = _state(3, [_v(3), _v(4)])
+    responses["/carbase/#3"] = _state(3, [_v(5)])
+    first = await server.search(max_versions=2)
+    assert _ids(first) == [1, 2] and first["next_cursor"] == "2:0"  # page 1 exactly used up
+    seen.clear()
+    rest = await server.search(max_versions=10, cursor="2:0")
+    assert _ids(rest) == [3, 4, 5] and rest["next_cursor"] is None
+    assert [p.get("pagina") for _, p in seen] == ["2", "3"]
+
+
+async def test_pages_per_call_are_bounded(fake_get, monkeypatch):  # B-17
+    monkeypatch.setattr(server, "MAX_PAGES", 2)
+    fake_get[0]["/carbase/"] = _state(9, [])  # every page empty for this query
+    out = await server.search(name_contains="nothing")
+    assert out["returned"] == 0 and out["next_cursor"] == "3:0" and "hint" in out
+
+
+async def test_price_sort_orders_versions_inside_generation(fake_get):  # B-17
+    versions = [_v(1, price=30000), _v(2), _v(3, price=20000), _v(4, price=25000)]
+    fake_get[0]["/carbase/"] = _state(1, versions)
+    assert _ids(await server.search(sort="price")) == [3, 4, 1, 2]
+    assert _ids(await server.search(sort="price", descending=True)) == [1, 4, 3, 2]
+    assert _ids(await server.search()) == [1, 2, 3, 4]  # other sorts keep Carbase's order
+
+
+@pytest.mark.parametrize("bad", ["abc", "0:1", "1:-1", "1:2:3", "99999:1", "1:x"])
+async def test_invalid_cursor(fake_get, bad):
+    with pytest.raises(ValueError, match="cursor"):
+        await server.search(cursor=bad)
 
 
 async def test_format_change_is_a_clear_error(fake_get):  # CR-01

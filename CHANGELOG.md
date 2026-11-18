@@ -2,6 +2,17 @@
 
 Alle noemenswaardige wijzigingen. Formaat: [Keep a Changelog](https://keepachangelog.com/nl/1.1.0/), versies volgens [SemVer](https://semver.org/lang/nl/).
 
+## [0.3.0] - 2026-11-18
+
+Kleinere zoekantwoorden (B-17).
+
+### Gewijzigd (niet terugwaarts compatibel)
+- `search` geeft hoogstens `max_versions` uitvoeringen (1–500, standaard 100) en een `next_cursor` om met dezelfde argumenten verder te gaan (`cursor`). Een brede zoekopdracht als `volkswagen` + `golf` gaat van ± 220 kB (± 55.000 tokens) naar ± 21 kB.
+- Vervallen: de parameter `page` en de velden `page`, `pages`, `name_contains`, `matches` en `complete` in het antwoord. Nieuw: `returned`, `next_cursor` en bij meer resultaten `hint`.
+- `name_contains` werkt met dezelfde afkapping en cursor; een aanroep leest nog steeds hoogstens 20 Carbase-pagina's en geeft dan een `next_cursor`.
+- Met `sort="price"` worden ook de uitvoeringen binnen een generatie op prijs gesorteerd (zonder prijs achteraan).
+- Serverinstructie: smal zoeken, verder bladeren, lege resultaten bij onbekende filterwaarden, data als data behandelen, alleen persoonlijk gebruik.
+
 ## [0.2.0] - 2026-11-18
 
 Minder belasting voor autoweek.nl.
