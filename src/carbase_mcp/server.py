@@ -8,10 +8,41 @@ from typing import Annotated, Any, Literal
 from mcp.server.fastmcp import FastMCP
 from pydantic import Field
 
-from . import __version__
+from . import __version__, parse
 from .client import CarbaseClient, CarbaseError
-from .parse import FILTER_PARAMS, filters, generations, makes, search_state, specs_page
 
+# Carbase filter key (as in the JSON "filters_new") -> URL parameter name, taken from
+# Autoweek's search-client bundle. Keys not listed here are internal and not exposed.
+FILTER_PARAMS = {
+    "fuel_type": "brandstof",
+    "body": "carrosserie",
+    "transmission": "transmissie",
+    "wheeldrive": "aandrijving",
+    "seat_count": "aantal-zitplaatsen",
+    "door_count": "aantal-deuren",
+    "energy_rating": "energielabel",
+    "segment": "segment",
+    "plugin_car": "plugin",
+    "cylinder_count": "cilinders",
+    "entrylevel": "instaphoogte",
+    "bijtelling_percentage": "bijtelling-percentage",
+    "year": "bouwjaar",
+    "price": "prijs",
+    "power_hp": "vermogen",
+    "totaltorque": "max-koppel",
+    "topspeed": "topsnelheid",
+    "acceleration": "acceleratie",
+    "consumption_combined": "verbruik",
+    "co2emission": "co2emission",
+    "elekactieradius": "actieradius",
+    "batterycapacity": "accu-capaciteit",
+    "electricBatteryQuickchargepower": "snellaadvermogen",
+    "min_trunkspace": "bagageruimte",
+    "maxweight_trailer_brakes": "aanhangermassa-geremd",
+    "mass": "massa",
+    "length": "lengte",
+    "cylinder_capacity": "cilinderinhoud",
+}
 SLUG = re.compile(r"^[a-z0-9]+(?:-+[a-z0-9]+)*-?$")
 SORT = {"make_model": "merkmodel", "price": "prijs", "year": "bouwjaar", "power": "vermogen"}
 MAX_PAGES = 20
@@ -60,16 +91,20 @@ def _filter_params(selection: dict[str, Any]) -> dict[str, str]:
     return params
 
 
+def _entry(item: dict) -> dict:
+    return {"slug": item["slug"], "name": item["name"], "versions": item.get("amount")}
+
+
 async def _state(path: str, params: dict[str, str] | None = None) -> dict:
     raw = await client.get(path, {**(params or {}), "format": "json"})
     try:
-        return search_state(raw)
+        return parse.search_state(raw)
     except (ValueError, KeyError, IndexError) as exc:
         raise CarbaseError(f"Unexpected response from Autoweek for {path}") from exc
 
 
 async def _specs(version_id: int, sections: list[str] | None) -> dict:
-    data = specs_page(await client.get(f"/auto/{version_id}/x/"))
+    data = parse.specs_page(await client.get(f"/auto/{version_id}/x/"))
     if not data["specs"]:
         raise CarbaseError(f"No specifications found for version {version_id}")
     if sections:
@@ -78,83 +113,95 @@ async def _specs(version_id: int, sections: list[str] | None) -> dict:
     return {"id": version_id, **data}
 
 
+Brand = Annotated[str, Field(description="Brand slug from list_brands, e.g. 'volkswagen'")]
+Model = Annotated[str | None, Field(description="Model slug from list_models, e.g. 'golf'")]
+Sections = Annotated[list[str] | None, Field(description="Section names to keep, e.g. ['PRESTATIES']")]
+
+
 @mcp.tool()
 async def list_brands() -> list[dict]:
     """All brands in Carbase: slug, name and number of versions."""
-    return [{"slug": m["slug"], "name": m["name"], "versions": m.get("amount")}
-            for m in makes(await _state("/carbase/"))]
+    return [_entry(m) for m in parse.makes(await _state("/carbase/"))]
 
 
 @mcp.tool()
-async def list_models(brand: Annotated[str, Field(description="Brand slug, e.g. 'volkswagen'")]) -> list[dict]:
+async def list_models(brand: Brand) -> list[dict]:
     """All models of a brand: slug, name and number of versions."""
     slug = _slug(brand, "brand")
-    for m in makes(await _state(_path(slug, None))):
+    for m in parse.makes(await _state(_path(slug, None))):
         if m["slug"] == slug:
-            return [{"slug": x["slug"], "name": x["name"], "versions": x.get("amount")}
-                    for x in m.get("models", [])]
+            return [_entry(x) for x in m.get("models", [])]
     raise ValueError(f"Unknown brand {brand!r}; call list_brands for valid slugs")
 
 
 @mcp.tool()
-async def list_filters(
-    brand: Annotated[str | None, Field(description="Optional brand slug to scope the counts")] = None,
-    model: Annotated[str | None, Field(description="Optional model slug (needs brand)")] = None,
-) -> list[dict]:
-    """Search filters for `search`: key, title and either options (value, name, count) or range steps.
+async def list_filters(brand: Brand | None = None, model: Model = None) -> list[dict]:
+    """Filters for `search`, with options (value, name, count) or range steps.
 
-    Examples: fuel_type (benzine, diesel, elektrisch, elektro-benzine, ...), body, transmission,
-    wheeldrive, seat_count, entrylevel (instaphoogte), segment, price, year, power_hp,
-    elekactieradius (km), min_trunkspace (l), maxweight_trailer_brakes (kg).
+    Counts reflect the optional brand/model. Useful keys: fuel_type (benzine, diesel,
+    elektrisch, elektro-benzine, ...), body, transmission, wheeldrive, seat_count,
+    entrylevel (instaphoogte), segment, price, year, power_hp, elekactieradius (km),
+    min_trunkspace (l), maxweight_trailer_brakes (kg).
     """
-    return filters(await _state(_path(brand, model)))
+    return parse.filters(await _state(_path(brand, model)), FILTER_PARAMS)
 
 
 @mcp.tool()
 async def search(
-    brand: Annotated[str | None, Field(description="Brand slug, e.g. 'toyota'")] = None,
-    model: Annotated[str | None, Field(description="Model slug from list_models, e.g. 'rav4' (needs brand)")] = None,
-    filters: Annotated[dict[str, Any] | None, Field(description=(
-        "Filter key -> option value(s) or range. Options: a value or list of values from "
-        "list_filters, e.g. {'fuel_type': ['elektrisch'], 'body': 'suv'}. Ranges: "
-        "{'min': x, 'max': y}, e.g. {'price': {'max': 40000}, 'year': {'min': 2022}}."))] = None,
-    name_contains: Annotated[str | None, Field(description="Only versions whose name contains all these words, e.g. '1.5 tsi'. Scans all result pages.")] = None,
+    brand: Brand | None = None,
+    model: Model = None,
+    filters: dict[str, Any] | None = None,
+    name_contains: str | None = None,
     sort: Literal["make_model", "price", "year", "power"] = "make_model",
     descending: bool = False,
-    page: Annotated[int, Field(ge=1, description="Result page (20 model generations per page); ignored with name_contains")] = 1,
+    page: Annotated[int, Field(ge=1)] = 1,
 ) -> dict:
-    """Search Carbase. Returns model generations (model, body, years, price range) each with
-    its matching versions (id, name, years, fuel, transmission, energy label, list price,
-    bijtelling %). Use a version id with get_specs or compare_versions.
+    """Search Carbase by brand, model and/or filters.
+
+    filters: filter key -> option value(s) or a range, keys and values from list_filters.
+      e.g. {"fuel_type": ["elektrisch", "elektro-benzine"], "body": "suv",
+            "price": {"max": 40000}, "year": {"min": 2022}}
+    name_contains: keep only versions whose name contains all these words ("1.5 tsi");
+      scans all result pages instead of one.
+    page: 20 model generations per page.
+
+    Returns model generations (model, body, years, price range), each with its matching
+    versions (id, name, years, fuel, transmission, energy label, list price, bijtelling %).
+    Use a version id with get_specs or compare_versions.
     """
     path = _path(brand, model)
     params = _filter_params(filters or {}) | {
-        "sorterenop": SORT[sort], "sortering": "aflopend" if descending else "oplopend"}
+        "sorterenop": SORT[sort],
+        "sortering": "aflopend" if descending else "oplopend",
+    }
     if not name_contains:
         state = await _state(path, params | {"pagina": str(page)})
-        return {"total_versions": state.get("total_amount"), "page": page,
-                "pages": state.get("pages"), "generations": generations(state)}
+        return {
+            "total_versions": state.get("total_amount"),
+            "page": page,
+            "pages": state.get("pages"),
+            "generations": parse.generations(state),
+        }
     words = name_contains.lower().split()
     found: list[dict] = []
     for p in range(1, MAX_PAGES + 1):
         state = await _state(path, params | {"pagina": str(p)})
-        for gen in generations(state):
-            gen["versions"] = [v for v in gen["versions"]
-                               if all(w in (v["name"] or "").lower() for w in words)]
+        for gen in parse.generations(state):
+            gen["versions"] = [v for v in gen["versions"] if all(w in v["name"].lower() for w in words)]
             if gen["versions"]:
                 found.append(gen)
         if p >= (state.get("pages") or 0):
             break
-    return {"name_contains": name_contains, "matches": sum(len(g["versions"]) for g in found),
-            "generations": found}
+    return {
+        "name_contains": name_contains,
+        "matches": sum(len(g["versions"]) for g in found),
+        "generations": found,
+    }
 
 
 @mcp.tool()
-async def get_specs(
-    version_id: Annotated[int, Field(gt=0, description="Version id from search")],
-    sections: Annotated[list[str] | None, Field(description="Optional section names to keep, e.g. ['PRESTATIES', 'INTERIEURMATEN']")] = None,
-) -> dict:
-    """Full specifications of one version, grouped per section (Dutch labels).
+async def get_specs(version_id: Annotated[int, Field(gt=0)], sections: Sections = None) -> dict:
+    """Full specifications of one version (id from search), grouped per section, Dutch labels.
 
     Sections: BASISKENMERKEN (prices), MOTORISERING, BRANDSTOFMOTOR or ELEKTROMOTOR/ACCU,
     PRESTATIES, VERBRUIK (WLTP), ONDERSTEL, GEWICHTEN, BAGAGE/LAADRUIMTE, EXTERIEURMATEN,
@@ -166,11 +213,14 @@ async def get_specs(
 
 @mcp.tool()
 async def compare_versions(
-    version_ids: Annotated[list[int], Field(min_length=2, max_length=5, description="2-5 version ids")],
-    sections: Annotated[list[str] | None, Field(description="Optional section names to compare")] = None,
-    only_differences: Annotated[bool, Field(description="Drop fields that are equal for all versions")] = True,
+    version_ids: Annotated[list[int], Field(min_length=2, max_length=5)],
+    sections: Sections = None,
+    only_differences: bool = True,
 ) -> dict:
-    """Compare 2-5 versions side by side: per section and field, the values in version_ids order."""
+    """Compare 2-5 versions: per section and field, the values in version_ids order.
+
+    only_differences drops fields that are equal for all versions.
+    """
     cars = [await _specs(v, sections) for v in version_ids]
     table: dict[str, dict[str, list[str | None]]] = {}
     for i, car in enumerate(cars):
@@ -178,12 +228,14 @@ async def compare_versions(
             for field, value in fields.items():
                 table.setdefault(section, {}).setdefault(field, [None] * len(cars))[i] = value
     if only_differences:
-        table = {s: d for s, fs in table.items()
-                 if (d := {f: v for f, v in fs.items() if len(set(v)) > 1})}
-    return {"versions": [{"id": c["id"], "title": c["title"], "subtitle": c["subtitle"]} for c in cars],
-            "comparison": table}
+        table = {s: d for s, fs in table.items() if (d := {f: v for f, v in fs.items() if len(set(v)) > 1})}
+    return {
+        "versions": [{"id": c["id"], "title": c["title"], "subtitle": c["subtitle"]} for c in cars],
+        "comparison": table,
+    }
 
 
 def main() -> None:
+    # FastMCP has no version argument; without this the server reports the SDK version.
     mcp._mcp_server.version = __version__
     mcp.run()

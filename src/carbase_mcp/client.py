@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from collections import OrderedDict
 
@@ -18,6 +19,9 @@ TIMEOUT = 20.0
 MAX_BYTES = 5_000_000  # largest model listing is ~1 MB
 CACHE_TTL = 3600.0
 CACHE_SIZE = 256
+
+# httpx logs every URL at INFO, including the consent redirect that carries the authId cookie.
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 class CarbaseError(RuntimeError):
@@ -39,21 +43,21 @@ class CarbaseClient:
     async def get(self, path: str, params: dict[str, str] | None = None) -> str:
         """GET a path on www.autoweek.nl and return the body text (cached)."""
         url = str(httpx.URL(path, params=params or {}))
-        hit = self._cache.get(url)
-        if hit and time.monotonic() - hit[0] < CACHE_TTL:
-            self._cache.move_to_end(url)
-            return hit[1]
-        async with self._lock:
-            body = await self._fetch(url)
-            # First visit lands on the DPG consent page and sets the authId cookie: retry once.
-            if body is None:
+        async with self._lock:  # one request at a time: throttle and cache stay consistent
+            hit = self._cache.pop(url, None)  # re-inserted below as most recently used
+            if hit is None or time.monotonic() - hit[0] >= CACHE_TTL:
+                # The first visit lands on the DPG consent page, which sets the authId
+                # cookie; the retry then gets the real page.
                 body = await self._fetch(url)
-            if body is None:
-                raise CarbaseError("Autoweek consent wall could not be passed")
-        self._cache[url] = (time.monotonic(), body)
-        while len(self._cache) > CACHE_SIZE:
-            self._cache.popitem(last=False)
-        return body
+                if body is None:
+                    body = await self._fetch(url)
+                if body is None:
+                    raise CarbaseError("Autoweek consent wall could not be passed")
+                hit = (time.monotonic(), body)
+            self._cache[url] = hit
+            while len(self._cache) > CACHE_SIZE:
+                self._cache.popitem(last=False)
+        return hit[1]
 
     async def _fetch(self, path: str) -> str | None:
         wait = MIN_INTERVAL - (time.monotonic() - self._last)

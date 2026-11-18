@@ -11,8 +11,7 @@ def no_throttle(monkeypatch):
 
 
 def make(handler):
-    http = httpx.AsyncClient(base_url=BASE_URL, follow_redirects=True,
-                             transport=httpx.MockTransport(handler))
+    http = httpx.AsyncClient(base_url=BASE_URL, follow_redirects=True, transport=httpx.MockTransport(handler))
     return CarbaseClient(http)
 
 
@@ -22,9 +21,13 @@ async def test_consent_redirect_then_retry_and_cache():
     def handler(request):
         calls.append(str(request.url))
         if request.url.host == "www.autoweek.nl" and "authId" not in request.headers.get("cookie", ""):
-            return httpx.Response(302, headers={
-                "location": "https://myprivacy.dpgmedia.nl/consent",
-                "set-cookie": "authId=abc; Domain=.autoweek.nl; Path=/"})
+            return httpx.Response(
+                302,
+                headers={
+                    "location": "https://myprivacy.dpgmedia.nl/consent",
+                    "set-cookie": "authId=abc; Domain=.autoweek.nl; Path=/",
+                },
+            )
         if request.url.host == "myprivacy.dpgmedia.nl":
             return httpx.Response(200, text="consent page")
         return httpx.Response(200, text="carbase")

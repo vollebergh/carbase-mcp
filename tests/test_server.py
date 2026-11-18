@@ -17,12 +17,22 @@ def test_path():
 
 
 def test_filter_params():
-    params = server._filter_params({
-        "fuel_type": ["elektrisch", "elektro-benzine"], "body": "suv",
-        "entrylevel": "681-", "price": {"max": 40000}, "year": {"min": 2020, "max": 2024},
-    })
-    assert params == {"brandstof": "elektrisch--elektro-benzine", "carrosserie": "suv",
-                      "instaphoogte": "681-", "prijs": "--40000", "bouwjaar": "2020--2024"}
+    params = server._filter_params(
+        {
+            "fuel_type": ["elektrisch", "elektro-benzine"],
+            "body": "suv",
+            "entrylevel": "681-",
+            "price": {"max": 40000},
+            "year": {"min": 2020, "max": 2024},
+        }
+    )
+    assert params == {
+        "brandstof": "elektrisch--elektro-benzine",
+        "carrosserie": "suv",
+        "instaphoogte": "681-",
+        "prijs": "--40000",
+        "bouwjaar": "2020--2024",
+    }
 
 
 @pytest.mark.parametrize("bad", [{"nope": "x"}, {"price": {"max": "40k"}}, {"body": "s&x=1"}])
@@ -33,8 +43,12 @@ def test_filter_params_rejects(bad):
 
 async def test_compare_only_differences(monkeypatch):
     async def fake_specs(version_id, sections):
-        return {"id": version_id, "title": f"car {version_id}", "subtitle": None,
-                "specs": {"A": {"same": "1", "diff": str(version_id)}, "B": {"same": "x"}}}
+        return {
+            "id": version_id,
+            "title": f"car {version_id}",
+            "subtitle": None,
+            "specs": {"A": {"same": "1", "diff": str(version_id)}, "B": {"same": "x"}},
+        }
 
     monkeypatch.setattr(server, "_specs", fake_specs)
     out = await server.compare_versions([1, 2])

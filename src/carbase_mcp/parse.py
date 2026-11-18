@@ -3,41 +3,9 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Collection
 from html.parser import HTMLParser
 from typing import Any
-
-# Carbase filter key (as in the JSON "filters_new") -> URL parameter name (from Autoweek's
-# search-client bundle). Keys not listed here are internal and not exposed.
-FILTER_PARAMS = {
-    "fuel_type": "brandstof",
-    "body": "carrosserie",
-    "transmission": "transmissie",
-    "wheeldrive": "aandrijving",
-    "seat_count": "aantal-zitplaatsen",
-    "door_count": "aantal-deuren",
-    "energy_rating": "energielabel",
-    "segment": "segment",
-    "plugin_car": "plugin",
-    "cylinder_count": "cilinders",
-    "entrylevel": "instaphoogte",
-    "bijtelling_percentage": "bijtelling-percentage",
-    "year": "bouwjaar",
-    "price": "prijs",
-    "power_hp": "vermogen",
-    "totaltorque": "max-koppel",
-    "topspeed": "topsnelheid",
-    "acceleration": "acceleratie",
-    "consumption_combined": "verbruik",
-    "co2emission": "co2emission",
-    "elekactieradius": "actieradius",
-    "batterycapacity": "accu-capaciteit",
-    "electricBatteryQuickchargepower": "snellaadvermogen",
-    "min_trunkspace": "bagageruimte",
-    "maxweight_trailer_brakes": "aanhangermassa-geremd",
-    "mass": "massa",
-    "length": "lengte",
-    "cylinder_capacity": "cilinderinhoud",
-}
 
 
 def search_state(raw: str) -> dict[str, Any]:
@@ -54,11 +22,11 @@ def makes(state: dict) -> list[dict]:
     return state["filters_new"]["make_models_new"]["values"]
 
 
-def filters(state: dict) -> list[dict]:
-    """Available search filters with their options and counts for the current selection."""
+def filters(state: dict, keys: Collection[str]) -> list[dict]:
+    """Search filters in `keys` with their options and counts for the current selection."""
     out = []
     for key, spec in state["filters_new"].items():
-        if key not in FILTER_PARAMS:
+        if key not in keys:
             continue
         values = spec.get("values") or []
         item: dict[str, Any] = {"key": key, "title": spec.get("title")}
@@ -66,7 +34,8 @@ def filters(state: dict) -> list[dict]:
             item["type"] = "options"
             item["options"] = [
                 {"value": str(v["slug"]), "name": v["name"], "count": v.get("amount")}
-                for v in values if v.get("amount")
+                for v in values
+                if v.get("amount")
             ]
         else:
             item["type"] = "range"
