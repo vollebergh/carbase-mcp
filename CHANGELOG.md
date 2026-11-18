@@ -2,6 +2,21 @@
 
 Alle noemenswaardige wijzigingen. Formaat: [Keep a Changelog](https://keepachangelog.com/nl/1.1.0/), versies volgens [SemVer](https://semver.org/lang/nl/).
 
+## [0.2.0] - 2026-11-18
+
+Minder belasting voor autoweek.nl.
+
+### Toegevoegd
+- Cache op schijf, gedeeld door alle sessies van een gebruiker. De consent-cookie (`authId`, met vervaldatum) wordt bewaard. Specificaties blijven 30 dagen, merken- en modellijsten 7 dagen en zoekresultaten 1 dag. Instelbaar via `CARBASE_MCP_CACHE_DIR`, `CARBASE_MCP_CACHE_MB` (standaard 100, `0` = uit) en `CARBASE_MCP_CACHE_DAYS` (standaard 30).
+- Terugschakelen bij HTTP 429/503 volgens `Retry-After` (1 s–1 uur, standaard 5 min). Tijdens de pauze gaan er geen verzoeken naar Autoweek; de cache blijft antwoorden.
+
+### Gewijzigd
+- `search` laat de standaardsortering en pagina 1 weg uit de URL, zodat `list_models`, `list_filters` en `search(brand)` hetzelfde antwoord delen.
+- De cache in het geheugen is vervangen door de schijfcache.
+
+### Beveiliging
+- De cache gebruikt alleen een eigen, privé map: geen symlink, van deze gebruiker, niet schrijfbaar voor anderen. Tijdelijke bestanden worden geopend met `O_NOFOLLOW` (S-09).
+
 ## [0.1.4] - 2026-11-18
 
 ### Gewijzigd

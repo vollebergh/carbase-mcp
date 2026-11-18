@@ -10,6 +10,7 @@ from mcp.server.fastmcp import FastMCP
 from pydantic import Field
 
 from . import __version__, parse
+from .cache import DiskCache
 from .client import CarbaseClient, CarbaseError, NotFoundError
 
 # Carbase filter key (as in the JSON "filters_new") -> URL parameter name, taken from
@@ -59,7 +60,7 @@ mcp = FastMCP(
         "can contain gaps or entry errors."
     ),
 )
-client = CarbaseClient()
+client = CarbaseClient(cache=DiskCache.from_env())
 # Canonical version paths seen in search results. Requesting /auto/{id}/x/ also works but costs
 # an extra redirect round trip to Autoweek.
 _urls: dict[int, str] = {}
@@ -94,6 +95,10 @@ def _filter_params(selection: dict[str, Any]) -> dict[str, str]:
             text = "--".join(_slug(str(v), f"{key} value") for v in values)
         params[FILTER_PARAMS[key]] = text
     return params
+
+
+def _page(params: dict[str, str], page: int) -> dict[str, str]:
+    return params | {"pagina": str(page)} if page > 1 else params
 
 
 def _entry(item: dict) -> dict:
@@ -188,12 +193,11 @@ async def search(
     Use a version id with get_specs or compare_versions.
     """
     path = _path(brand, model)
-    params = _filter_params(filters or {}) | {
-        "sorterenop": SORT[sort],
-        "sortering": "aflopend" if descending else "oplopend",
-    }
+    params = _filter_params(filters or {})
+    if sort != "make_model" or descending:  # Carbase's default; leaving it out shares the cache
+        params |= {"sorterenop": SORT[sort], "sortering": "aflopend" if descending else "oplopend"}
     if not name_contains:
-        state = await _state(path, params | {"pagina": str(page)})
+        state = await _state(path, _page(params, page))
         return {
             "total_versions": state.get("total_amount"),
             "page": page,
@@ -204,7 +208,7 @@ async def search(
     found: list[dict] = []
     pages = 0
     for p in range(1, MAX_PAGES + 1):
-        state = await _state(path, params | {"pagina": str(p)})
+        state = await _state(path, _page(params, p))
         for gen in _parse(parse.generations, state):
             gen["versions"] = [v for v in gen["versions"] if all(w in v["name"].lower() for w in words)]
             if gen["versions"]:

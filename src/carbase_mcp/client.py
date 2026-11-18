@@ -1,13 +1,15 @@
-"""HTTP access to www.autoweek.nl: consent cookie, throttling, size cap and a small TTL cache."""
+"""HTTP access to www.autoweek.nl: consent cookie, throttling, back-off, size cap and caching."""
 
 from __future__ import annotations
 
 import asyncio
 import logging
 import time
-from collections import OrderedDict
+from email.utils import parsedate_to_datetime
 
 import httpx
+
+from .cache import DiskCache, ttl_for
 
 BASE_URL = "https://www.autoweek.nl"
 HOST = "www.autoweek.nl"
@@ -17,9 +19,9 @@ USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Ge
 MIN_INTERVAL = 0.5  # seconds between upstream requests
 TIMEOUT = 20.0
 MAX_BYTES = 5_000_000  # largest model listing is ~1 MB
-CACHE_TTL = 3600.0
-CACHE_SIZE = 256  # entries
-CACHE_CHARS = 50_000_000  # total cached text; a listing is ~0.5 MB
+BACKOFF_DEFAULT = 300.0  # pause after 429/503 without a usable Retry-After
+BACKOFF_MAX = 3600.0
+CONSENT_COOKIES = ("authId", "xAuthId")  # the only cookies kept on disk
 
 # httpx logs every URL at INFO, including the consent redirect that carries the authId cookie.
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -39,8 +41,22 @@ async def _only_allowed_hosts(request: httpx.Request) -> None:
         raise CarbaseError(f"Blocked request to {request.url.scheme}://{request.url.host}")
 
 
+def _retry_after(value: str | None) -> float:
+    """Seconds from a Retry-After header (delta or HTTP date), clamped to [1, BACKOFF_MAX]."""
+    if value is None:
+        return BACKOFF_DEFAULT
+    try:
+        seconds = float(value)
+    except ValueError:
+        try:
+            seconds = parsedate_to_datetime(value).timestamp() - time.time()
+        except (TypeError, ValueError):
+            seconds = BACKOFF_DEFAULT
+    return min(max(seconds, 1.0), BACKOFF_MAX)
+
+
 class CarbaseClient:
-    def __init__(self, http: httpx.AsyncClient | None = None) -> None:
+    def __init__(self, http: httpx.AsyncClient | None = None, cache: DiskCache | None = None) -> None:
         self._http = http or httpx.AsyncClient(
             base_url=BASE_URL,
             follow_redirects=True,
@@ -48,32 +64,51 @@ class CarbaseClient:
             headers={"User-Agent": USER_AGENT, "Accept-Language": "nl,en;q=0.8"},
         )
         self._http.event_hooks = {"request": [_only_allowed_hosts], "response": []}
+        self._cache = cache
         self._lock = asyncio.Lock()
         self._last = 0.0
-        self._cache: OrderedDict[str, tuple[float, str]] = OrderedDict()
-        self._cached_chars = 0
+        self._paused_until = 0.0
+        for c in cache.load_cookies() if cache else []:
+            try:
+                if c["name"] in CONSENT_COOKIES and (c["expires"] is None or c["expires"] > time.time()):
+                    self._http.cookies.set(c["name"], c["value"], domain=c["domain"], path=c["path"])
+            except (KeyError, TypeError):
+                continue
 
     async def get(self, path: str, params: dict[str, str] | None = None) -> str:
-        """GET a path on www.autoweek.nl and return the body text (cached)."""
+        """GET a path on www.autoweek.nl and return the body text (cached on disk)."""
         url = str(httpx.URL(path, params=params or {}))
-        async with self._lock:  # one request at a time: throttle and cache stay consistent
-            hit = self._cache.pop(url, None)  # re-inserted below as most recently used
-            if hit:
-                self._cached_chars -= len(hit[1])
-            if hit is None or time.monotonic() - hit[0] >= CACHE_TTL:
-                # The first visit lands on the DPG consent page, which sets the authId
-                # cookie; the retry then gets the real page.
+        async with self._lock:  # one request at a time: throttle, pause and cache stay consistent
+            if self._cache and (body := self._cache.get(url, ttl_for(url))) is not None:
+                return body
+            if (wait := self._paused_until - time.monotonic()) > 0:
+                raise CarbaseError(f"Autoweek asked to slow down; paused for another {wait:.0f} s")
+            body = await self._fetch(url)
+            if body is None:
+                # Landed on the DPG consent page, which set the authId cookie: retry, keep the cookie.
                 body = await self._fetch(url)
                 if body is None:
-                    body = await self._fetch(url)
-                if body is None:
                     raise CarbaseError("Autoweek consent wall could not be passed")
-                hit = (time.monotonic(), body)
-            self._cache[url] = hit
-            self._cached_chars += len(hit[1])
-            while len(self._cache) > CACHE_SIZE or self._cached_chars > CACHE_CHARS:
-                self._cached_chars -= len(self._cache.popitem(last=False)[1][1])
-        return hit[1]
+                self._save_cookies()
+            if self._cache:
+                self._cache.put(url, body)
+        return body
+
+    def _save_cookies(self) -> None:
+        if self._cache:
+            self._cache.save_cookies(
+                [
+                    {
+                        "name": c.name,
+                        "value": c.value,
+                        "domain": c.domain,
+                        "path": c.path,
+                        "expires": c.expires,
+                    }
+                    for c in self._http.cookies.jar
+                    if c.name in CONSENT_COOKIES and c.domain.endswith("autoweek.nl") and c.value
+                ]
+            )
 
     async def _fetch(self, path: str) -> str | None:
         wait = MIN_INTERVAL - (time.monotonic() - self._last)
@@ -84,6 +119,12 @@ class CarbaseClient:
                 self._last = time.monotonic()
                 if resp.url.host == CONSENT_HOST:
                     return None
+                if resp.status_code in (429, 503):
+                    pause = _retry_after(resp.headers.get("retry-after"))
+                    self._paused_until = time.monotonic() + pause
+                    raise CarbaseError(
+                        f"Autoweek asked to slow down (HTTP {resp.status_code}); pausing {pause:.0f} s"
+                    )
                 if resp.status_code == 404:
                     raise NotFoundError(f"Not found on Autoweek: {path}")
                 resp.raise_for_status()

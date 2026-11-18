@@ -106,9 +106,17 @@ async def test_search_builds_url_params(fake_get):
         "brandstof": "elektro-benzine",
         "sorterenop": "prijs",
         "sortering": "aflopend",
-        "pagina": "1",
         "format": "json",
     }
+
+
+async def test_default_search_shares_cache_key_with_list_models(fake_get):
+    responses, seen = fake_get
+    responses["/carbase/vw/"] = _state(2, [], [{"slug": "vw", "name": "VW", "models": []}])
+    await server.list_models("vw")
+    await server.search("vw")
+    await server.search("vw", page=2)
+    assert [p for _, p in seen] == [{"format": "json"}, {"format": "json"}, {"pagina": "2", "format": "json"}]
 
 
 async def test_name_contains_scans_pages_and_tolerates_empty_names(fake_get):  # CR-02, CR-03

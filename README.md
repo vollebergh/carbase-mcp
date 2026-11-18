@@ -30,7 +30,7 @@ Voorbeeldvragen aan het model:
 Je hebt [uv](https://docs.astral.sh/uv/) nodig. Er zijn geen API-sleutels nodig.
 
 ```bash
-claude mcp add --scope user carbase -- uvx --from git+https://github.com/vollebergh/carbase-mcp@v0.1.4 carbase-mcp
+claude mcp add --scope user carbase -- uvx --from git+https://github.com/vollebergh/carbase-mcp@v0.2.0 carbase-mcp
 ```
 
 Of in de configuratie van een andere MCP-client:
@@ -38,7 +38,7 @@ Of in de configuratie van een andere MCP-client:
 ```json
 "carbase": {
   "command": "uvx",
-  "args": ["--from", "git+https://github.com/vollebergh/carbase-mcp@v0.1.4", "carbase-mcp"]
+  "args": ["--from", "git+https://github.com/vollebergh/carbase-mcp@v0.2.0", "carbase-mcp"]
 }
 ```
 
@@ -48,13 +48,27 @@ Pin op een tag, zodat er niet ongemerkt nieuwe code binnenkomt.
 
 - **Zoeken** gebruikt de JSON die de Carbase-pagina's zelf ook laden (`?format=json`). Specificaties komen uit de HTML van `/auto/{id}/`.
 - **Consentmuur van DPG Media:** de eerste aanvraag volgt de redirect, die een sessiecookie zet. Er wordt niets aangeklikt of opgeslagen.
-- **Zuinig met verzoeken:** hoogstens 2 verzoeken per seconde en een cache in het geheugen (1 uur). Per tool-aanroep gaan er hoogstens 20 pagina's naar Autoweek.
-- **Alleen-lezen:** de server doet alleen GET-verzoeken via https naar `www.autoweek.nl`. Dat wordt bij elke redirect gecontroleerd. Hij gebruikt geen sleutels en schrijft niets naar schijf.
+- **Zuinig met verzoeken:**
+  - Hoogstens 2 verzoeken per seconde, en per tool-aanroep hoogstens 20 pagina's.
+  - Geeft Autoweek een 429 of 503, dan pauzeert de server zolang Autoweek vraagt (standaard 5 minuten). Tijdens die pauze antwoordt hij alleen uit de cache.
+- **Cache op schijf**, gedeeld door alle sessies van dezelfde gebruiker:
+  - De consent-cookie (alleen `authId`), zodat niet elke nieuwe sessie de omweg via DPG maakt.
+  - Specificaties 30 dagen, merken- en modellijsten 7 dagen, zoekresultaten 1 dag.
+  - Begrensd in omvang en leeftijd; instelbaar via omgevingsvariabelen:
+
+    | Variabele | Standaard | Betekenis |
+    |---|---|---|
+    | `CARBASE_MCP_CACHE_DIR` | `~/.cache/carbase-mcp` | cachemap, alleen voor de eigen gebruiker (0700); een gedeelde of andermans map wordt geweigerd |
+    | `CARBASE_MCP_CACHE_MB` | `100` | maximale omvang; `0` zet de cache uit |
+    | `CARBASE_MCP_CACHE_DAYS` | `30` | maximale leeftijd van elk item |
+
+- **Alleen-lezen bij Autoweek:** de server doet alleen GET-verzoeken via https naar `www.autoweek.nl`. Dat wordt bij elke redirect gecontroleerd. Hij gebruikt geen sleutels en schrijft alleen in de eigen cachemap.
 
 ## Goed om te weten
 
 - De data komt zoals Autoweek hem levert. Er zitten gaten en soms invoerfouten in; een voorbeeld is een instaphoogte van 43 cm bij een Subaru Outback.
-- Je zoekvragen gaan naar Autoweek/DPG Media, net als bij gewoon gebruik van de website.
+- Je zoekvragen gaan naar Autoweek/DPG Media, net als bij gewoon gebruik van de website. Ze staan ook in de cache op schijf (tot 30 dagen); zet `CARBASE_MCP_CACHE_MB=0` als je dat niet wilt.
+- Prijzen in de cache kunnen tot een week oud zijn (modellijst) of een dag (zoekresultaten).
 - De uitvoer is data van derden. Behandel hem in je eigen agents als onbetrouwbare invoer.
 - Werkt de server niet meer, dan heeft Autoweek waarschijnlijk de site veranderd.
 
