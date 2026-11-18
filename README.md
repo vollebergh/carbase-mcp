@@ -34,12 +34,20 @@ De filters zijn die van de Carbase zelf, onder andere:
 
 Welke sleutels en waarden er zijn, geeft `list_filters` (met aantallen). De belangrijkste sleutels: `fuel_type`, `body`, `transmission`, `wheeldrive`, `seat_count`, `door_count`, `segment`, `energy_rating`, `plugin_car`, `entrylevel` (instaphoogte: `1-580`, `581-680`, `681-` in mm) en bereiken `price`, `year`, `power_hp`, `elekactieradius`, `batterycapacity`, `min_trunkspace`, `maxweight_trailer_brakes`, `mass`, `length`, `topspeed`, `acceleration`, `consumption_combined`, `co2emission`. Bereiken nemen willekeurige getallen, niet alleen de stappen uit `list_filters`. Een onbekende optiewaarde geeft geen fout maar een leeg resultaat.
 
-Een uitgebreidere handleiding voor taalmodellen staat in [llms.txt](llms.txt).
+Een uitgebreidere handleiding voor taalmodellen staat in [llms.txt](llms.txt), zie [Voor taalmodellen](#voor-taalmodellen).
 
 Voorbeeldvragen aan het model:
 - *Welke elektrische SUV's onder € 50.000 hebben een hoge instap en een actieradius van meer dan 400 km?*
 - *Vergelijk de Mazda CX-5 165 en 194 pk Luxury uit 2019.*
 - *Wat is de instaphoogte van de Toyota RAV4 2.5 Hybrid uit 2016?*
+
+## Voor taalmodellen
+
+Een model leest bestanden in een repository niet uit zichzelf. Wat het automatisch krijgt, zijn de tool-beschrijvingen en de korte serverinstructie. De uitgebreide handleiding, [llms.txt](llms.txt), niet: die bevat de filtersleutels met hun waarden, vaste werkwijzen, valkuilen (zoals de omvang van brede zoekopdrachten) en de foutmeldingen. Geef hem dus zelf mee:
+
+- **Claude Code:** verwijs ernaar in je prompt (`lees @llms.txt` in een kloon), of kopieer het bestand naar je project en zet in `CLAUDE.md` of `AGENTS.md`: *"Lees llms.txt voordat je de carbase-tools gebruikt."*
+- **Andere clients:** plak de inhoud in de systeemprompt of de projectinstructies.
+- **Via een URL:** `https://github.com/vollebergh/carbase-mcp/blob/main/llms.txt` is voor een model alleen bereikbaar als de repository publiek is.
 
 ## Installeren
 
