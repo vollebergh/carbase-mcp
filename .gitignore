@@ -1,5 +1,9 @@
-# Obsidian-vault: documentatie, niet onder versiebeheer
+# Obsidian-vault en -instellingen: documentatie, niet onder versiebeheer
 obsidian/
+.obsidian/
+
+# Lokale instructies voor Claude Code (bevat lokale paden)
+CLAUDE.md
 
 # Build-uitvoer (wheels/sdists via `uv build --out-dir builds/`)
 builds/*
