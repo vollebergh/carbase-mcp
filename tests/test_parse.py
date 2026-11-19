@@ -136,3 +136,14 @@ def test_version_urls_accepts_only_matching_auto_paths():
         {"id": 8, "url": "/auto/80/x/"},  # prefix of another id
     ]
     assert version_urls({"result": [{"versions": versions}]}) == {1: "/auto/1/vw-golf-1-5-tsi/"}
+
+
+def test_return_types_match_parser_output():  # B-12: undeclared keys would be dropped silently
+    from typing import get_type_hints
+
+    from carbase_mcp.models import Generation, Specs, Version
+
+    gen = generations(STATE[0])[0]
+    assert set(gen) == set(get_type_hints(Generation))
+    assert set(gen["versions"][0]) == set(get_type_hints(Version))
+    assert set(specs_page(SPEC_HTML)) | {"id"} == set(get_type_hints(Specs))

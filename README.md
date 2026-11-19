@@ -14,6 +14,9 @@ MCP-server die de [Autoweek Carbase](https://www.autoweek.nl/carbase/) doorzoekb
 | `search(brand?, model?, filters?, name_contains?, sort, descending, max_versions, cursor?)` | modelgeneraties met hun uitvoeringen (standaard hoogstens 100, verder bladeren met een cursor): id, naam, bouwjaren, brandstof, transmissie, energielabel, nieuwprijs, bijtelling |
 | `get_specs(version_id, sections?)` | alle specificaties van één uitvoering (± 190 velden in 16 secties: prijzen, motor, prestaties, WLTP-verbruik, gewichten, maten, instaphoogte, bagageruimte, veiligheid, uitrusting, garantie, historische prijzen) |
 | `compare_versions(version_ids, sections?, only_differences)` | 2–5 uitvoeringen naast elkaar, standaard alleen de verschillen |
+| `get_fields(version_ids, fields)` | een paar velden (hoogstens 10) van 1–20 uitvoeringen, bijvoorbeeld de instaphoogte van tien auto's; onbekende veldnamen krijgen suggesties |
+
+Elke tool publiceert een `outputSchema`, zodat een client de structuur van het antwoord kent.
 
 De filters zijn die van de Carbase zelf, onder andere:
 - brandstof, carrosserie, transmissie, aandrijving, zitplaatsen
@@ -59,7 +62,7 @@ Je hebt [uv](https://docs.astral.sh/uv/) nodig (of pip, zie onder). Er zijn geen
 ### Claude Code
 
 ```bash
-claude mcp add --scope user carbase -- uvx --from git+https://github.com/vollebergh/carbase-mcp@v0.3.0 carbase-mcp
+claude mcp add --scope user carbase -- uvx --from git+https://github.com/vollebergh/carbase-mcp@v0.4.0 carbase-mcp
 ```
 
 `--scope user` maakt hem beschikbaar in al je projecten; zonder de optie geldt hij alleen voor de huidige map. Start daarna een nieuwe sessie: de tools worden bij het starten van een sessie geladen.
@@ -72,7 +75,7 @@ claude mcp remove carbase    # verwijderen (bij bijwerken: eerst verwijderen, da
 Instellingen meegeven (zie [Cache op schijf](#hoe-het-werkt)), bijvoorbeeld de cache uitzetten:
 
 ```bash
-claude mcp add --scope user carbase -e CARBASE_MCP_CACHE_MB=0 -- uvx --from git+https://github.com/vollebergh/carbase-mcp@v0.3.0 carbase-mcp
+claude mcp add --scope user carbase -e CARBASE_MCP_CACHE_MB=0 -- uvx --from git+https://github.com/vollebergh/carbase-mcp@v0.4.0 carbase-mcp
 ```
 
 ### Andere MCP-clients
@@ -80,7 +83,7 @@ claude mcp add --scope user carbase -e CARBASE_MCP_CACHE_MB=0 -- uvx --from git+
 ```json
 "carbase": {
   "command": "uvx",
-  "args": ["--from", "git+https://github.com/vollebergh/carbase-mcp@v0.3.0", "carbase-mcp"],
+  "args": ["--from", "git+https://github.com/vollebergh/carbase-mcp@v0.4.0", "carbase-mcp"],
   "env": { "CARBASE_MCP_CACHE_MB": "100" }
 }
 ```
@@ -94,7 +97,7 @@ Pin op een tag, zodat er niet ongemerkt nieuwe code binnenkomt.
 Uit een gebouwde wheel (zie *Ontwikkelen*) of een kloon van de repo:
 
 ```bash
-pip install builds/carbase_mcp-0.3.0-py3-none-any.whl   # of: pip install .
+pip install builds/carbase_mcp-0.4.0-py3-none-any.whl   # of: pip install .
 carbase-mcp                                              # start de stdio-server
 ```
 
@@ -145,6 +148,8 @@ Een kloon als MCP gebruiken, bijvoorbeeld om aan de code te werken:
 ```bash
 claude mcp add carbase-dev -- uv run --project /pad/naar/carbase-mcp carbase-mcp
 ```
+
+Bij elke push en pull request draait [CI](.github/workflows/ci.yml): ruff (inclusief beveiligingsregels), de tests op Python 3.12 en 3.14, pip-audit en gitleaks. Dependabot stelt wekelijks updates voor, met een afkoelperiode van 7 dagen.
 
 Versies volgen [SemVer](https://semver.org/lang/nl/); zie [CHANGELOG.md](CHANGELOG.md). Een release is een commit met de nieuwe versie in `pyproject.toml` en een regel in de CHANGELOG, een tag en een build:
 

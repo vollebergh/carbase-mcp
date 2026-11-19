@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import difflib
 import re
 from collections.abc import Callable
 from typing import Annotated, Any, Literal
@@ -12,6 +13,7 @@ from pydantic import Field
 from . import __version__, parse
 from .cache import DiskCache
 from .client import CarbaseClient, CarbaseError, NotFoundError
+from .models import Comparison, Entry, Fields, SearchFilter, SearchResult, Specs
 
 # Carbase filter key (as in the JSON "filters_new") -> URL parameter name, taken from
 # Autoweek's search-client bundle. Keys not listed here are internal and not exposed.
@@ -50,6 +52,7 @@ SORT = {"make_model": "merkmodel", "price": "prijs", "year": "bouwjaar", "power"
 MAX_PAGES = 20  # Carbase pages (20 generations each) read per search call
 DEFAULT_VERSIONS = 100
 MAX_VERSIONS = 500
+MAX_FIELD_VERSIONS = 20  # get_fields: one spec page per version (cached, else ~1-2 s each)
 CURSOR = re.compile(r"^([1-9][0-9]{0,3}):([0-9]{1,5})$")
 MAX_URLS = 20_000  # remembered version URLs (~100 bytes each)
 
@@ -59,7 +62,8 @@ mcp = FastMCP(
         "Autoweek Carbase: Dutch catalogue of ~100,000 car versions (uitvoeringen) since the 1970s "
         "with Dutch list prices (euro, incl. VAT/BPM) and full specifications with Dutch labels. "
         "Flow: list_brands/list_models -> search (brand, model and/or filters; see list_filters) "
-        "-> get_specs(version_id) or compare_versions(ids). "
+        "-> get_specs(version_id), compare_versions(ids) or get_fields(ids, fields) for a few fields of "
+        "many versions. "
         "Keep searches narrow: a model alone can have 1,000+ versions. search returns at most "
         "max_versions (default 100) with total_versions and next_cursor; pass next_cursor to "
         "continue, but when total_versions is in the hundreds prefer adding filters or "
@@ -126,7 +130,7 @@ def _page(params: dict[str, str], page: int) -> dict[str, str]:
     return params | {"pagina": str(page)} if page > 1 else params
 
 
-def _entry(item: dict) -> dict:
+def _entry(item: dict) -> Entry:
     return {"slug": item["slug"], "name": item["name"], "versions": item.get("amount")}
 
 
@@ -150,7 +154,7 @@ async def _state(path: str, params: dict[str, str] | None = None) -> dict:
     return state
 
 
-async def _specs(version_id: int, sections: list[str] | None) -> dict:
+async def _specs(version_id: int, sections: list[str] | None) -> Specs:
     data = _parse(parse.specs_page, await client.get(_urls.get(version_id, f"/auto/{version_id}/x/")))
     if not data["specs"]:
         raise CarbaseError(f"No specifications found for version {version_id}")
@@ -169,13 +173,13 @@ Sections = Annotated[list[str] | None, Field(description="Section names to keep,
 
 
 @mcp.tool()
-async def list_brands() -> list[dict]:
+async def list_brands() -> list[Entry]:
     """All brands in Carbase: slug, name and number of versions."""
     return [_entry(m) for m in _parse(parse.makes, await _state("/carbase/"))]
 
 
 @mcp.tool()
-async def list_models(brand: Brand) -> list[dict]:
+async def list_models(brand: Brand) -> list[Entry]:
     """All models of a brand: slug, name and number of versions."""
     slug = _slug(brand, "brand")
     makes = _parse(parse.makes, await _state(_path(slug, None)))
@@ -183,7 +187,7 @@ async def list_models(brand: Brand) -> list[dict]:
 
 
 @mcp.tool()
-async def list_filters(brand: Brand | None = None, model: Model = None) -> list[dict]:
+async def list_filters(brand: Brand | None = None, model: Model = None) -> list[SearchFilter]:
     """Filters for `search`, with options (value, name, count) or range steps.
 
     Counts reflect the optional brand/model. Useful keys: fuel_type (benzine, diesel,
@@ -204,7 +208,7 @@ async def search(
     descending: bool = False,
     max_versions: Annotated[int, Field(ge=1, le=MAX_VERSIONS)] = DEFAULT_VERSIONS,
     cursor: str | None = None,
-) -> dict:
+) -> SearchResult:
     """Search Carbase by brand, model and/or filters. Returns at most max_versions versions.
 
     filters: filter key -> option value(s) or a range, keys and values from list_filters.
@@ -257,7 +261,12 @@ async def search(
         if returned == max_versions or pages_read == MAX_PAGES:
             next_cursor = f"{page}:0"  # more pages exist; continue there
             break
-    result = {"total_versions": total, "returned": returned, "next_cursor": next_cursor, "generations": found}
+    result: SearchResult = {
+        "total_versions": total,
+        "returned": returned,
+        "next_cursor": next_cursor,
+        "generations": found,
+    }
     if next_cursor:
         result["hint"] = (
             f"More results: call search again with the same arguments and cursor={next_cursor!r}, "
@@ -267,7 +276,7 @@ async def search(
 
 
 @mcp.tool()
-async def get_specs(version_id: Annotated[int, Field(gt=0)], sections: Sections = None) -> dict:
+async def get_specs(version_id: Annotated[int, Field(gt=0)], sections: Sections = None) -> Specs:
     """Full specifications of one version (id from search), grouped per section, Dutch labels.
 
     Sections: BASISKENMERKEN (prices), MOTORISERING, BRANDSTOFMOTOR or ELEKTROMOTOR/ACCU,
@@ -283,7 +292,7 @@ async def compare_versions(
     version_ids: Annotated[list[int], Field(min_length=2, max_length=5)],
     sections: Sections = None,
     only_differences: bool = True,
-) -> dict:
+) -> Comparison:
     """Compare 2-5 versions: per section and field, the values in version_ids order.
 
     only_differences drops fields that are equal for all versions.
@@ -300,6 +309,46 @@ async def compare_versions(
         "versions": [{"id": c["id"], "title": c["title"], "subtitle": c["subtitle"]} for c in cars],
         "comparison": table,
     }
+
+
+@mcp.tool()
+async def get_fields(
+    version_ids: Annotated[list[int], Field(min_length=1, max_length=MAX_FIELD_VERSIONS)],
+    fields: Annotated[list[str], Field(min_length=1, max_length=10)],
+) -> Fields:
+    """A few specification fields for up to 20 versions, e.g. the step-in height of 10 cars.
+
+    fields: field labels as get_specs shows them, matched case-insensitively in any section,
+      e.g. ["instaphoogte voor", "inhoud", "gewicht leeg"].
+    Returns per version its title and the value of each field (null when Carbase has none),
+    plus unknown_fields with close label suggestions when a label exists in none of them.
+    Much smaller than get_specs or compare_versions for this purpose.
+    """
+    wanted = {_label(f): f for f in fields}
+    rows, labels = [], set()
+    for vid in version_ids:
+        car = await _specs(vid, None)
+        flat = {_label(k): v for section in car["specs"].values() for k, v in section.items()}
+        labels |= flat.keys()
+        rows.append(
+            {
+                "id": vid,
+                "title": car["title"],
+                "subtitle": car["subtitle"],
+                "values": {f: flat.get(key) for key, f in wanted.items()},
+            }
+        )
+    result: Fields = {"versions": rows}
+    unknown = {
+        f: difflib.get_close_matches(key, labels, n=3) for key, f in wanted.items() if key not in labels
+    }
+    if unknown:
+        result["unknown_fields"] = unknown
+    return result
+
+
+def _label(text: str) -> str:
+    return " ".join(text.lower().split())
 
 
 def main() -> None:

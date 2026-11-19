@@ -231,3 +231,28 @@ async def test_remembered_urls_are_bounded(fake_get, monkeypatch):
     fake_get[0]["/carbase/"] = _state(1, versions)
     await server.search()
     assert server._urls == {3: "/auto/3/s/", 4: "/auto/4/s/"}
+
+
+def _spec_html(rows):
+    cells = "".join(f"<tr><td>{k}</td><td>{v}</td></tr>" for k, v in rows)
+    head = '<h1>car</h1><section class="table-description"><h3>INTERIEURMATEN</h3>'
+    return f"{head}<table>{cells}</table></section>"
+
+
+async def test_get_fields_across_versions(fake_get):  # B-10
+    responses, seen = fake_get
+    responses["/auto/1/x/"] = _spec_html([("instaphoogte voor", "715 mm"), ("Hoofdruimte  voor", "1.000 mm")])
+    responses["/auto/2/x/"] = _spec_html([("hoofdruimte voor", "950 mm")])  # no step-in height
+    out = await server.get_fields([1, 2], ["Instaphoogte voor", "hoofdruimte voor"])
+    assert [r["values"] for r in out["versions"]] == [
+        {"Instaphoogte voor": "715 mm", "hoofdruimte voor": "1.000 mm"},
+        {"Instaphoogte voor": None, "hoofdruimte voor": "950 mm"},
+    ]
+    assert "unknown_fields" not in out and len(seen) == 2
+
+
+async def test_get_fields_suggests_labels(fake_get):  # B-10
+    fake_get[0]["/auto/1/x/"] = _spec_html([("instaphoogte voor", "715 mm")])
+    out = await server.get_fields([1], ["instap hoogte"])
+    assert out["unknown_fields"] == {"instap hoogte": ["instaphoogte voor"]}
+    assert out["versions"][0]["values"] == {"instap hoogte": None}

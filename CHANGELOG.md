@@ -2,6 +2,16 @@
 
 Alle noemenswaardige wijzigingen. Formaat: [Keep a Changelog](https://keepachangelog.com/nl/1.1.0/), versies volgens [SemVer](https://semver.org/lang/nl/).
 
+## [0.4.0] - 2026-11-19
+
+### Toegevoegd
+- Tool `get_fields(version_ids, fields)`: een paar velden (hoogstens 10) van 1–20 uitvoeringen in één antwoord, met suggesties voor onbekende veldnamen (B-10).
+- Elke tool heeft een `outputSchema` via `TypedDict`-retourtypes in `models.py`; clients krijgen dezelfde data ook als `structuredContent` (B-12).
+- CI (GitHub Actions, actions vastgepind op commit-SHA, alleen leesrechten): ruff, tests op Python 3.12 en 3.14, pip-audit en gitleaks. Dependabot voor uv en GitHub Actions met 7 dagen afkoelperiode (B-13).
+
+### Gewijzigd
+- `CLAUDE.md` en `.obsidian/` staan niet meer in de repository, ook niet in de geschiedenis; alle commits en tags zijn herschreven (B-19). Commit-hashes van eerdere versies zijn daardoor veranderd.
+
 ## [0.3.0] - 2026-11-18
 
 Kleinere zoekantwoorden (B-17).
