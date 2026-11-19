@@ -10,7 +10,7 @@ from typing import Annotated, Any, Literal
 from mcp.server.fastmcp import FastMCP
 from pydantic import Field
 
-from . import __version__, parse
+from . import __version__, parse, serve
 from .cache import DiskCache
 from .client import CarbaseClient, CarbaseError, NotFoundError
 from .models import Comparison, Entry, Fields, SearchFilter, SearchResult, Specs
@@ -351,7 +351,11 @@ def _label(text: str) -> str:
     return " ".join(text.lower().split())
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
+    args = serve.parse_args(argv)
     # FastMCP has no version argument; without this the server reports the SDK version.
     mcp._mcp_server.version = __version__
-    mcp.run()
+    if args.http:
+        serve.run_http(mcp, args)
+    else:
+        mcp.run()

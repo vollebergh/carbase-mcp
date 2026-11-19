@@ -25,7 +25,7 @@ Voorbeeldvragen aan het model:
 
 ## Installeren
 
-De server is een gewoon programma dat via **stdio** met een MCP-client praat: de client start het als subproces. Er is geen poort, geen netwerkdienst en geen API-sleutel nodig. Je hebt [uv](https://docs.astral.sh/uv/) nodig (of pip, zie [Zonder uvx](#zonder-uvx)).
+De server is een gewoon programma dat standaard via **stdio** met een MCP-client praat: de client start het als subproces. Er is geen poort, geen netwerkdienst en geen API-sleutel nodig. Voor clients die alleen externe servers kennen, zoals ChatGPT, is er een optionele [HTTP-modus](#chatgpt-en-andere-clients-die-alleen-externe-servers-kennen). Je hebt [uv](https://docs.astral.sh/uv/) nodig (of pip, zie [Zonder uvx](#zonder-uvx)).
 
 Wat elke client nodig heeft, is dit:
 
@@ -33,21 +33,21 @@ Wat elke client nodig heeft, is dit:
 |---|---|
 | Transport | stdio (lokaal proces) |
 | Commando | `uvx` |
-| Argumenten | `--from`, `git+https://github.com/vollebergh/carbase-mcp@v0.4.0`, `carbase-mcp` |
-| Omgevingsvariabelen (optioneel) | `CARBASE_MCP_CACHE_MB`, `CARBASE_MCP_CACHE_DIR`, `CARBASE_MCP_CACHE_DAYS`, zie [Hoe het werkt](#hoe-het-werkt) |
+| Argumenten | `--from`, `git+https://github.com/vollebergh/carbase-mcp@v0.5.0`, `carbase-mcp` |
+| Omgevingsvariabelen (optioneel) | `CARBASE_MCP_CACHE_MB`, `CARBASE_MCP_CACHE_DIR`, `CARBASE_MCP_CACHE_DAYS`, zie [Hoe het werkt](#hoe-het-werkt); voor de HTTP-modus zie [ChatGPT](#chatgpt-en-andere-clients-die-alleen-externe-servers-kennen) |
 
 De clients hieronder gebruiken allemaal deze gegevens, alleen de configuratie ziet er anders uit. Herstart of herlaad de client na een wijziging, want de tools worden bij het opstarten geladen. De namen van configuratiebestanden en velden verschillen per versie van een client; controleer ze in de documentatie van je client.
 
 ### Claude Code
 
 ```bash
-claude mcp add --scope user carbase -- uvx --from git+https://github.com/vollebergh/carbase-mcp@v0.4.0 carbase-mcp
+claude mcp add --scope user carbase -- uvx --from git+https://github.com/vollebergh/carbase-mcp@v0.5.0 carbase-mcp
 ```
 
 `--scope user` maakt hem beschikbaar in al je projecten; zonder de optie geldt hij alleen voor de huidige map. Instellingen geef je mee met `-e`:
 
 ```bash
-claude mcp add --scope user carbase -e CARBASE_MCP_CACHE_MB=0 -- uvx --from git+https://github.com/vollebergh/carbase-mcp@v0.4.0 carbase-mcp
+claude mcp add --scope user carbase -e CARBASE_MCP_CACHE_MB=0 -- uvx --from git+https://github.com/vollebergh/carbase-mcp@v0.5.0 carbase-mcp
 ```
 
 ```bash
@@ -64,7 +64,7 @@ Veel clients lezen een JSON-bestand met een `mcpServers`-object (Claude Desktop:
   "mcpServers": {
     "carbase": {
       "command": "uvx",
-      "args": ["--from", "git+https://github.com/vollebergh/carbase-mcp@v0.4.0", "carbase-mcp"],
+      "args": ["--from", "git+https://github.com/vollebergh/carbase-mcp@v0.5.0", "carbase-mcp"],
       "env": { "CARBASE_MCP_CACHE_MB": "100" }
     }
   }
@@ -83,7 +83,7 @@ VS Code gebruikt de sleutel `servers` en vraagt om een `type` (in `.vscode/mcp.j
     "carbase": {
       "type": "stdio",
       "command": "uvx",
-      "args": ["--from", "git+https://github.com/vollebergh/carbase-mcp@v0.4.0", "carbase-mcp"]
+      "args": ["--from", "git+https://github.com/vollebergh/carbase-mcp@v0.5.0", "carbase-mcp"]
     }
   }
 }
@@ -100,7 +100,7 @@ In `opencode.json` (of `.jsonc`) onder `mcp`; het commando is hier één lijst:
   "mcp": {
     "carbase": {
       "type": "local",
-      "command": ["uvx", "--from", "git+https://github.com/vollebergh/carbase-mcp@v0.4.0", "carbase-mcp"],
+      "command": ["uvx", "--from", "git+https://github.com/vollebergh/carbase-mcp@v0.5.0", "carbase-mcp"],
       "environment": { "CARBASE_MCP_CACHE_MB": "100" },
       "enabled": true
     }
@@ -110,20 +110,42 @@ In `opencode.json` (of `.jsonc`) onder `mcp`; het commando is hier één lijst:
 
 Dit is de vorm uit de [documentatie van opencode](https://opencode.ai/docs/mcp-servers); nieuwere versies van opencode wijken af (`mcp.servers`, `disabled`).
 
-### ChatGPT en andere webclients
+### ChatGPT en andere clients die alleen externe servers kennen
 
-ChatGPT en vergelijkbare webclients praten alleen met MCP-servers die via HTTPS bereikbaar zijn (in ChatGPT: *developer mode* en een eigen connector), niet met een lokaal stdio-proces. `carbase-mcp` is bewust alleen stdio, dus hij is er **niet rechtstreeks** in te gebruiken. Een eigen stdio-naar-HTTP-brug is technisch mogelijk, maar dan zet je een dienst op het internet zonder authenticatie die in jouw naam bij Autoweek opvraagt, en dat past niet bij de voorwaarden van Autoweek. Dit is niet getest en niet ondersteund.
+ChatGPT (developer mode, eigen connector) en vergelijkbare webclients starten geen lokaal programma; ze verbinden met een MCP-server via een HTTPS-adres. Daarvoor heeft `carbase-mcp` een optionele HTTP-modus. Die luistert alleen op `127.0.0.1`; je maakt hem zelf bereikbaar met een tunnel of reverse proxy naar keuze (bijvoorbeeld cloudflared, ngrok, Tailscale Funnel of je eigen webserver met TLS). De server hangt van geen van die diensten af.
+
+1. Maak een geheim token (dat wordt het geheime deel van het adres):
+
+   ```bash
+   python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+   ```
+
+2. Start de server met dat token en de hostnaam van je tunnel:
+
+   ```bash
+   CARBASE_MCP_HTTP_TOKEN=<token> uvx --from git+https://github.com/vollebergh/carbase-mcp@v0.5.0 carbase-mcp --http --public-host mcp.example.com
+   ```
+
+3. Laat je tunnel of proxy `https://mcp.example.com` doorsturen naar `http://127.0.0.1:8000`.
+4. Vul in de client het adres `https://mcp.example.com/<token>/mcp` in, met authenticatie "geen". ChatGPT-connectors kennen alleen OAuth of geen authenticatie; het token in het adres is hier de toegangscontrole.
+
+Opties: `--port` (standaard 8000), `--public-host` (herhaalbaar; verzoeken met een andere `Host` worden geweigerd). Dezelfde instellingen kunnen via `CARBASE_MCP_HTTP_PORT` en `CARBASE_MCP_PUBLIC_HOST` (komma-gescheiden). Zonder `CARBASE_MCP_HTTP_TOKEN` maakt de server bij elke start een nieuw willekeurig token en toont hij het adres.
+
+Let op:
+- **Behandel het adres als een wachtwoord.** Wie het kent, kan de server gebruiken, en dus via jouw verbinding bij Autoweek opvragen. Draai hem alleen voor jezelf (de voorwaarden van Autoweek staan alleen persoonlijk gebruik toe) en kies een nieuw token als het adres uitlekt.
+- De server logt geen verzoekadressen, zodat het token niet in logbestanden komt. Je tunnel of proxy doet dat mogelijk wel; zet daar de toegangslog uit of beperk hem.
+- Getest met de HTTP-client van de MCP-bibliotheek, ook met een nagebootste tunnel-host; niet getest in ChatGPT zelf.
 
 ### Zonder uvx
 
 Uit een gebouwde wheel (zie [Ontwikkelen](#ontwikkelen)) of een kloon van de repo:
 
 ```bash
-pip install builds/carbase_mcp-0.4.0-py3-none-any.whl   # of: pip install .
+pip install builds/carbase_mcp-0.5.0-py3-none-any.whl   # of: pip install .
 carbase-mcp                                              # start de stdio-server
 ```
 
-Dan is `"command": "carbase-mcp"` (zonder `args`) genoeg in de clientconfiguratie. `carbase-mcp` kent geen opties; alle instellingen gaan via omgevingsvariabelen.
+Dan is `"command": "carbase-mcp"` (zonder `args`) genoeg in de clientconfiguratie. Zonder opties draait hij via stdio; `carbase-mcp --help` toont de opties van de HTTP-modus.
 
 ## Voor taalmodellen
 
@@ -293,3 +315,7 @@ claude mcp add carbase-dev -- uv run --project /pad/naar/carbase-mcp carbase-mcp
 ```
 
 Bij elke push en pull request draait [CI](.github/workflows/ci.yml): ruff (inclusief beveiligingsregels), de tests op Python 3.12 en 3.14, pip-audit en gitleaks. Dependabot stelt wekelijks updates voor, met een afkoelperiode van 7 dagen.
+
+## Licentie
+
+De code valt onder [MIT-0](LICENSE): iedereen mag hem gebruiken, aanpassen en verspreiden, ook zonder naamsvermelding. Dat geldt alleen voor deze code. De gegevens die de server bij Autoweek ophaalt, zijn van DPG Media en vallen onder hun [voorwaarden](https://www.autoweek.nl/copyright/).

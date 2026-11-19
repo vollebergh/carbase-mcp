@@ -2,6 +2,15 @@
 
 Alle noemenswaardige wijzigingen. Formaat: [Keep a Changelog](https://keepachangelog.com/nl/1.1.0/), versies volgens [SemVer](https://semver.org/lang/nl/).
 
+## [0.5.0] - 2026-11-19
+
+### Toegevoegd
+- Optionele HTTP-modus voor clients die alleen externe MCP-servers kennen, zoals ChatGPT: `carbase-mcp --http [--port 8000] [--public-host HOST]`. Luistert alleen op 127.0.0.1; toegang via een geheim pad (`/<token>/mcp`, token uit `CARBASE_MCP_HTTP_TOKEN` of per start willekeurig); Host- en Origin-controle; hoogstens 32 sessies en 64 kB per verzoek; geen toegangslog. Stdio blijft de standaard.
+- Licentie MIT-0 (`LICENSE`) en pakketgegevens (licentie, repository, changelog, trefwoorden, classifiers).
+
+### Gewijzigd
+- README: `llms.txt` opgenomen in het hoofdstuk "Voor taalmodellen"; installatie voor meerdere clients (Claude Code, Claude Desktop/Cursor, VS Code, opencode, ChatGPT); licentiesectie.
+
 ## [0.4.0] - 2026-11-19
 
 ### Toegevoegd
