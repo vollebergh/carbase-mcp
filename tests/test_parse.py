@@ -102,6 +102,7 @@ def test_filters_skip_internal_and_empty_options():
         "title": "Prijs",
         "type": "range",
         "steps": [15000, 16000],
+        "options": None,
     }
 
 

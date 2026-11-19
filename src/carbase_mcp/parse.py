@@ -32,7 +32,7 @@ def filters(state: dict, keys: Collection[str]) -> list[dict]:
         if key not in keys:
             continue
         values = spec.get("values") or []
-        item: dict[str, Any] = {"key": key, "title": spec.get("title")}
+        item: dict[str, Any] = {"key": key, "title": spec.get("title"), "options": None, "steps": None}
         if values and isinstance(values[0], dict):
             item["type"] = "options"
             item["options"] = [

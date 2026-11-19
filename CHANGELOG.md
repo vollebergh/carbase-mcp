@@ -2,6 +2,12 @@
 
 Alle noemenswaardige wijzigingen. Formaat: [Keep a Changelog](https://keepachangelog.com/nl/1.1.0/), versies volgens [SemVer](https://semver.org/lang/nl/).
 
+## [0.5.2] - 2026-11-19
+
+### Opgelost
+- De reparatie van 0.5.1 was onvolledig: een ontbrekend optioneel veld kwam als `null` in de uitvoer, terwijl het schema geen `null` toeliet, waardoor MCP-clients de uitvoer van `search` en `get_fields` weigerden ("Output validation error"). `hint`, `unknown_fields`, `options` en `steps` staan nu altijd in de uitvoer en zijn `null` als ze niet van toepassing zijn; het schema staat dat toe.
+- Tests roepen alle zeven tools nu aan via een echte MCP-clientsessie, met de uitvoercontrole aan server- en clientkant.
+
 ## [0.5.1] - 2026-11-19
 
 ### Opgelost

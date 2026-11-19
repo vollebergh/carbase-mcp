@@ -1,10 +1,10 @@
 """Return types of the tools. FastMCP turns these into each tool's outputSchema.
 
-No ``from __future__ import annotations`` here: TypedDict reads ``NotRequired`` when the class is
-created, and with string annotations it cannot, so every key would become required.
+Fields that do not always apply are always present and ``None`` when not applicable: FastMCP
+serialises a missing optional key as ``null``, and MCP clients validate that against the schema.
 """
 
-from typing import NotRequired, TypedDict
+from typing import TypedDict
 
 
 class Entry(TypedDict):
@@ -23,8 +23,8 @@ class SearchFilter(TypedDict):
     key: str
     title: str | None
     type: str  # "options" or "range"
-    options: NotRequired[list[FilterOption]]
-    steps: NotRequired[list[float]]
+    options: list[FilterOption] | None  # for type "options"
+    steps: list[float] | None  # for type "range"
 
 
 class Version(TypedDict):
@@ -53,7 +53,7 @@ class SearchResult(TypedDict):
     returned: int
     next_cursor: str | None
     generations: list[Generation]
-    hint: NotRequired[str]
+    hint: str | None  # set when there are more results
 
 
 class Specs(TypedDict):
@@ -83,4 +83,4 @@ class FieldRow(TypedDict):
 
 class Fields(TypedDict):
     versions: list[FieldRow]
-    unknown_fields: NotRequired[dict[str, list[str]]]
+    unknown_fields: dict[str, list[str]] | None  # labels found in none of the versions

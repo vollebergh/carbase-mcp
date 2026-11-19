@@ -132,7 +132,7 @@ async def test_name_contains_scans_pages_and_tolerates_empty_names(fake_get):  #
     responses["/carbase/vw/golf/#2"] = _state(2, [_v(3, "Golf 1.5 tsi Life"), {"id": 4}])
     out = await server.search("vw", "golf", name_contains="1.5 TSI")
     assert _ids(out) == [1, 3] and out["returned"] == 2 and out["next_cursor"] is None
-    assert "hint" not in out and len(seen) == 2
+    assert out["hint"] is None and len(seen) == 2
 
 
 async def test_truncation_and_cursor_within_a_page(fake_get):  # B-17
@@ -248,7 +248,7 @@ async def test_get_fields_across_versions(fake_get):  # B-10
         {"Instaphoogte voor": "715 mm", "hoofdruimte voor": "1.000 mm"},
         {"Instaphoogte voor": None, "hoofdruimte voor": "950 mm"},
     ]
-    assert "unknown_fields" not in out and len(seen) == 2
+    assert out["unknown_fields"] is None and len(seen) == 2
 
 
 async def test_get_fields_suggests_labels(fake_get):  # B-10
@@ -259,26 +259,40 @@ async def test_get_fields_suggests_labels(fake_get):  # B-10
 
 
 async def _call(name, args):
-    """Through FastMCP, including its validation of the output against the outputSchema."""
-    return await server.mcp.call_tool(name, args)
+    """Through a real MCP client session: server-side and client-side outputSchema validation."""
+    from mcp.shared.memory import create_connected_server_and_client_session
+
+    async with create_connected_server_and_client_session(server.mcp._mcp_server) as client:
+        result = await client.call_tool(name, args)
+    assert not result.isError, result.content[0].text
+    return result.structuredContent
 
 
-async def test_optional_output_fields_may_be_absent(fake_get):  # regression 0.5.1: NotRequired was ignored
+async def test_optional_output_fields_may_be_absent(fake_get):  # regression 0.5.1/0.5.2
     responses, _ = fake_get
     responses["/carbase/"] = _state(1, [_v(1)])  # everything fits: no next_cursor, so no hint
     responses["/auto/1/x/"] = _spec_html([("instaphoogte voor", "715 mm")])
-    await _call("search", {})
-    await _call("get_fields", {"version_ids": [1], "fields": ["instaphoogte voor"]})  # no unknown_fields
+    assert (await _call("search", {}))["hint"] is None
+    fields = await _call("get_fields", {"version_ids": [1], "fields": ["instaphoogte voor"]})
+    assert fields["unknown_fields"] is None
     responses["/carbase/"]["filters_new"] |= {
         "fuel_type": {"title": "Brandstof", "values": [{"slug": "diesel", "name": "Diesel", "amount": 2}]},
         "price": {"title": "Prijs", "values": [15000, 16000]},
     }
-    await _call("list_filters", {})  # options without steps and steps without options
+    filters = {f["key"]: f for f in (await _call("list_filters", {}))["result"]}
+    assert filters["fuel_type"]["steps"] is None and filters["price"]["options"] is None
 
 
-def test_typeddicts_mark_optional_keys():
-    from carbase_mcp.models import Fields, SearchFilter, SearchResult
-
-    assert SearchResult.__optional_keys__ == {"hint"}
-    assert Fields.__optional_keys__ == {"unknown_fields"}
-    assert SearchFilter.__optional_keys__ == {"options", "steps"}
+async def test_every_tool_passes_client_side_output_validation(fake_get):
+    responses, _ = fake_get
+    makes = [
+        {"slug": "vw", "name": "VW", "amount": 3, "models": [{"slug": "golf", "name": "Golf", "amount": 3}]}
+    ]
+    responses["/carbase/"] = _state(1, [_v(1)], makes)
+    responses["/carbase/vw/"] = _state(1, [_v(1)], makes)
+    responses["/auto/1/x/"] = _spec_html([("instaphoogte voor", "715 mm")])
+    responses["/auto/2/x/"] = _spec_html([("instaphoogte voor", "700 mm")])
+    assert (await _call("list_brands", {}))["result"][0]["slug"] == "vw"
+    assert (await _call("list_models", {"brand": "vw"}))["result"][0]["slug"] == "golf"
+    assert (await _call("get_specs", {"version_id": 1}))["specs"]["INTERIEURMATEN"]
+    assert (await _call("compare_versions", {"version_ids": [1, 2]}))["comparison"]

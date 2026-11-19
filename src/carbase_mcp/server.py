@@ -266,6 +266,7 @@ async def search(
         "returned": returned,
         "next_cursor": next_cursor,
         "generations": found,
+        "hint": None,
     }
     if next_cursor:
         result["hint"] = (
@@ -338,13 +339,10 @@ async def get_fields(
                 "values": {f: flat.get(key) for key, f in wanted.items()},
             }
         )
-    result: Fields = {"versions": rows}
     unknown = {
         f: difflib.get_close_matches(key, labels, n=3) for key, f in wanted.items() if key not in labels
     }
-    if unknown:
-        result["unknown_fields"] = unknown
-    return result
+    return {"versions": rows, "unknown_fields": unknown or None}
 
 
 def _label(text: str) -> str:
