@@ -256,3 +256,29 @@ async def test_get_fields_suggests_labels(fake_get):  # B-10
     out = await server.get_fields([1], ["instap hoogte"])
     assert out["unknown_fields"] == {"instap hoogte": ["instaphoogte voor"]}
     assert out["versions"][0]["values"] == {"instap hoogte": None}
+
+
+async def _call(name, args):
+    """Through FastMCP, including its validation of the output against the outputSchema."""
+    return await server.mcp.call_tool(name, args)
+
+
+async def test_optional_output_fields_may_be_absent(fake_get):  # regression 0.5.1: NotRequired was ignored
+    responses, _ = fake_get
+    responses["/carbase/"] = _state(1, [_v(1)])  # everything fits: no next_cursor, so no hint
+    responses["/auto/1/x/"] = _spec_html([("instaphoogte voor", "715 mm")])
+    await _call("search", {})
+    await _call("get_fields", {"version_ids": [1], "fields": ["instaphoogte voor"]})  # no unknown_fields
+    responses["/carbase/"]["filters_new"] |= {
+        "fuel_type": {"title": "Brandstof", "values": [{"slug": "diesel", "name": "Diesel", "amount": 2}]},
+        "price": {"title": "Prijs", "values": [15000, 16000]},
+    }
+    await _call("list_filters", {})  # options without steps and steps without options
+
+
+def test_typeddicts_mark_optional_keys():
+    from carbase_mcp.models import Fields, SearchFilter, SearchResult
+
+    assert SearchResult.__optional_keys__ == {"hint"}
+    assert Fields.__optional_keys__ == {"unknown_fields"}
+    assert SearchFilter.__optional_keys__ == {"options", "steps"}

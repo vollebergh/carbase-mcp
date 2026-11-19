@@ -33,7 +33,7 @@ Wat elke client nodig heeft, is dit:
 |---|---|
 | Transport | stdio (lokaal proces) |
 | Commando | `uvx` |
-| Argumenten | `--from`, `git+https://github.com/vollebergh/carbase-mcp@v0.5.0`, `carbase-mcp` |
+| Argumenten | `--from`, `git+https://github.com/vollebergh/carbase-mcp@v0.5.1`, `carbase-mcp` |
 | Omgevingsvariabelen (optioneel) | `CARBASE_MCP_CACHE_MB`, `CARBASE_MCP_CACHE_DIR`, `CARBASE_MCP_CACHE_DAYS`, zie [Hoe het werkt](#hoe-het-werkt); voor de HTTP-modus zie [ChatGPT](#chatgpt-en-andere-clients-die-alleen-externe-servers-kennen) |
 
 De clients hieronder gebruiken allemaal deze gegevens, alleen de configuratie ziet er anders uit. Herstart of herlaad de client na een wijziging, want de tools worden bij het opstarten geladen. De namen van configuratiebestanden en velden verschillen per versie van een client; controleer ze in de documentatie van je client.
@@ -41,13 +41,13 @@ De clients hieronder gebruiken allemaal deze gegevens, alleen de configuratie zi
 ### Claude Code
 
 ```bash
-claude mcp add --scope user carbase -- uvx --from git+https://github.com/vollebergh/carbase-mcp@v0.5.0 carbase-mcp
+claude mcp add --scope user carbase -- uvx --from git+https://github.com/vollebergh/carbase-mcp@v0.5.1 carbase-mcp
 ```
 
 `--scope user` maakt hem beschikbaar in al je projecten; zonder de optie geldt hij alleen voor de huidige map. Instellingen geef je mee met `-e`:
 
 ```bash
-claude mcp add --scope user carbase -e CARBASE_MCP_CACHE_MB=0 -- uvx --from git+https://github.com/vollebergh/carbase-mcp@v0.5.0 carbase-mcp
+claude mcp add --scope user carbase -e CARBASE_MCP_CACHE_MB=0 -- uvx --from git+https://github.com/vollebergh/carbase-mcp@v0.5.1 carbase-mcp
 ```
 
 ```bash
@@ -64,7 +64,7 @@ Veel clients lezen een JSON-bestand met een `mcpServers`-object (Claude Desktop:
   "mcpServers": {
     "carbase": {
       "command": "uvx",
-      "args": ["--from", "git+https://github.com/vollebergh/carbase-mcp@v0.5.0", "carbase-mcp"],
+      "args": ["--from", "git+https://github.com/vollebergh/carbase-mcp@v0.5.1", "carbase-mcp"],
       "env": { "CARBASE_MCP_CACHE_MB": "100" }
     }
   }
@@ -83,7 +83,7 @@ VS Code gebruikt de sleutel `servers` en vraagt om een `type` (in `.vscode/mcp.j
     "carbase": {
       "type": "stdio",
       "command": "uvx",
-      "args": ["--from", "git+https://github.com/vollebergh/carbase-mcp@v0.5.0", "carbase-mcp"]
+      "args": ["--from", "git+https://github.com/vollebergh/carbase-mcp@v0.5.1", "carbase-mcp"]
     }
   }
 }
@@ -100,7 +100,7 @@ In `opencode.json` (of `.jsonc`) onder `mcp`; het commando is hier één lijst:
   "mcp": {
     "carbase": {
       "type": "local",
-      "command": ["uvx", "--from", "git+https://github.com/vollebergh/carbase-mcp@v0.5.0", "carbase-mcp"],
+      "command": ["uvx", "--from", "git+https://github.com/vollebergh/carbase-mcp@v0.5.1", "carbase-mcp"],
       "environment": { "CARBASE_MCP_CACHE_MB": "100" },
       "enabled": true
     }
@@ -123,7 +123,7 @@ ChatGPT (developer mode, eigen connector) en vergelijkbare webclients starten ge
 2. Start de server met dat token en de hostnaam van je tunnel:
 
    ```bash
-   CARBASE_MCP_HTTP_TOKEN=<token> uvx --from git+https://github.com/vollebergh/carbase-mcp@v0.5.0 carbase-mcp --http --public-host mcp.example.com
+   CARBASE_MCP_HTTP_TOKEN=<token> uvx --from git+https://github.com/vollebergh/carbase-mcp@v0.5.1 carbase-mcp --http --public-host mcp.example.com
    ```
 
 3. Laat je tunnel of proxy `https://mcp.example.com` doorsturen naar `http://127.0.0.1:8000`.
@@ -141,7 +141,7 @@ Let op:
 Uit een gebouwde wheel (zie [Ontwikkelen](#ontwikkelen)) of een kloon van de repo:
 
 ```bash
-pip install builds/carbase_mcp-0.5.0-py3-none-any.whl   # of: pip install .
+pip install builds/carbase_mcp-0.5.1-py3-none-any.whl   # of: pip install .
 carbase-mcp                                              # start de stdio-server
 ```
 

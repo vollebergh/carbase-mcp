@@ -1,6 +1,6 @@
 [project]
 name = "carbase-mcp"
-version = "0.5.0"
+version = "0.5.1"
 description = "MCP server for the Autoweek Carbase: Dutch car makes, models, versions and full specifications"
 readme = "README.md"
 requires-python = ">=3.12"

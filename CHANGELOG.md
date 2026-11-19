@@ -2,6 +2,11 @@
 
 Alle noemenswaardige wijzigingen. Formaat: [Keep a Changelog](https://keepachangelog.com/nl/1.1.0/), versies volgens [SemVer](https://semver.org/lang/nl/).
 
+## [0.5.1] - 2026-11-19
+
+### Opgelost
+- Sinds 0.4.0 faalden tools als een optioneel veld ontbrak: `search` zonder `hint` (alle resultaten passen), `get_fields` zonder `unknown_fields` en `list_filters` (een filter heeft `options` óf `steps`). Oorzaak: `from __future__ import annotations` in `models.py`, waardoor `TypedDict` `NotRequired` niet zag en elk veld verplicht maakte. Regressietests gaan nu door de uitvoercontrole van FastMCP.
+
 ## [0.5.0] - 2026-11-19
 
 ### Toegevoegd

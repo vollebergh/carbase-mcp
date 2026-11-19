@@ -1,6 +1,8 @@
-"""Return types of the tools. FastMCP turns these into each tool's outputSchema."""
+"""Return types of the tools. FastMCP turns these into each tool's outputSchema.
 
-from __future__ import annotations
+No ``from __future__ import annotations`` here: TypedDict reads ``NotRequired`` when the class is
+created, and with string annotations it cannot, so every key would become required.
+"""
 
 from typing import NotRequired, TypedDict
 
