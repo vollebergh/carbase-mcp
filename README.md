@@ -33,7 +33,7 @@ Wat elke client nodig heeft, is dit:
 |---|---|
 | Transport | stdio (lokaal proces) |
 | Commando | `uvx` |
-| Argumenten | `--from`, `git+https://github.com/vollebergh/carbase-mcp@v0.6.0`, `carbase-mcp` |
+| Argumenten | `--from`, `git+https://github.com/vollebergh/carbase-mcp@v0.6.1`, `carbase-mcp` |
 | Omgevingsvariabelen (optioneel) | `CARBASE_MCP_CACHE_MB`, `CARBASE_MCP_CACHE_DIR`, `CARBASE_MCP_CACHE_DAYS`, zie [Hoe het werkt](#hoe-het-werkt); voor de HTTP-modus zie [ChatGPT](#chatgpt-en-andere-clients-die-alleen-externe-servers-kennen) |
 
 De clients hieronder gebruiken allemaal deze gegevens, alleen de configuratie ziet er anders uit. Herstart of herlaad de client na een wijziging, want de tools worden bij het opstarten geladen. De namen van configuratiebestanden en velden verschillen per versie van een client; controleer ze in de documentatie van je client.
@@ -41,13 +41,13 @@ De clients hieronder gebruiken allemaal deze gegevens, alleen de configuratie zi
 ### Claude Code
 
 ```bash
-claude mcp add --scope user carbase -- uvx --from git+https://github.com/vollebergh/carbase-mcp@v0.6.0 carbase-mcp
+claude mcp add --scope user carbase -- uvx --from git+https://github.com/vollebergh/carbase-mcp@v0.6.1 carbase-mcp
 ```
 
 `--scope user` maakt hem beschikbaar in al je projecten; zonder de optie geldt hij alleen voor de huidige map. Instellingen geef je mee met `-e`:
 
 ```bash
-claude mcp add --scope user carbase -e CARBASE_MCP_CACHE_MB=0 -- uvx --from git+https://github.com/vollebergh/carbase-mcp@v0.6.0 carbase-mcp
+claude mcp add --scope user carbase -e CARBASE_MCP_CACHE_MB=0 -- uvx --from git+https://github.com/vollebergh/carbase-mcp@v0.6.1 carbase-mcp
 ```
 
 ```bash
@@ -64,7 +64,7 @@ Veel clients lezen een JSON-bestand met een `mcpServers`-object (Claude Desktop:
   "mcpServers": {
     "carbase": {
       "command": "uvx",
-      "args": ["--from", "git+https://github.com/vollebergh/carbase-mcp@v0.6.0", "carbase-mcp"],
+      "args": ["--from", "git+https://github.com/vollebergh/carbase-mcp@v0.6.1", "carbase-mcp"],
       "env": { "CARBASE_MCP_CACHE_MB": "100" }
     }
   }
@@ -83,7 +83,7 @@ VS Code gebruikt de sleutel `servers` en vraagt om een `type` (in `.vscode/mcp.j
     "carbase": {
       "type": "stdio",
       "command": "uvx",
-      "args": ["--from", "git+https://github.com/vollebergh/carbase-mcp@v0.6.0", "carbase-mcp"]
+      "args": ["--from", "git+https://github.com/vollebergh/carbase-mcp@v0.6.1", "carbase-mcp"]
     }
   }
 }
@@ -100,7 +100,7 @@ In `opencode.json` (of `.jsonc`) onder `mcp`; het commando is hier één lijst:
   "mcp": {
     "carbase": {
       "type": "local",
-      "command": ["uvx", "--from", "git+https://github.com/vollebergh/carbase-mcp@v0.6.0", "carbase-mcp"],
+      "command": ["uvx", "--from", "git+https://github.com/vollebergh/carbase-mcp@v0.6.1", "carbase-mcp"],
       "environment": { "CARBASE_MCP_CACHE_MB": "100" },
       "enabled": true
     }
@@ -123,7 +123,7 @@ ChatGPT (developer mode, eigen connector) en vergelijkbare webclients starten ge
 2. Start de server met dat token en de hostnaam van je tunnel:
 
    ```bash
-   CARBASE_MCP_HTTP_TOKEN=<token> uvx --from git+https://github.com/vollebergh/carbase-mcp@v0.6.0 carbase-mcp --http --public-host mcp.example.com
+   CARBASE_MCP_HTTP_TOKEN=<token> uvx --from git+https://github.com/vollebergh/carbase-mcp@v0.6.1 carbase-mcp --http --public-host mcp.example.com
    ```
 
 3. Laat je tunnel of proxy `https://mcp.example.com` doorsturen naar `http://127.0.0.1:8000`.
@@ -141,7 +141,7 @@ Let op:
 Uit een gebouwde wheel (zie [Ontwikkelen](#ontwikkelen)) of een kloon van de repo:
 
 ```bash
-pip install builds/carbase_mcp-0.6.0-py3-none-any.whl   # of: pip install .
+pip install builds/carbase_mcp-0.6.1-py3-none-any.whl   # of: pip install .
 carbase-mcp                                              # start de stdio-server
 ```
 
@@ -173,7 +173,7 @@ Antwoord in de taal van de gebruiker. Geef waarden door zoals Carbase ze geeft e
 2. **Slug onbekend:** `list_brands()` → `list_models("toyota")`. Slugs zijn kleine letters met streepjes (`alfa-romeo`, `mercedes-benz`, `c-hr`).
 3. **Auto's zoeken op eigenschappen in de hele catalogus:** `list_filters()` voor de sleutels en opties, dan `search(filters={...}, sort="price")`.
 4. **Vergelijken:** `compare_versions([id1, id2], sections=["PRESTATIES"])` (2–5 id's; standaard alleen de verschillen).
-5. **Een paar velden van meerdere uitvoeringen** (bijvoorbeeld de instaphoogte van 10 auto's): `get_fields([id1, id2, ...], ["instaphoogte voor"])`, hoogstens 20 uitvoeringen en 10 velden per aanroep. Veel kleiner dan `get_specs` per uitvoering. Onbekende veldnamen komen terug in `unknown_fields`, met suggesties. Komt een veld in meer secties voor (`max. vermogen` in `BRANDSTOFMOTOR` én `ELEKTROMOTOR`), dan staan beide waarden in het antwoord (`"BRANDSTOFMOTOR: 607 kW (825 pk)/9250 tpm; ELEKTROMOTOR: 330 kW"`); kies er één met een sectie ervoor: `"ELEKTROMOTOR: max. vermogen"`. Het gecombineerde vermogen van een hybride is `max. vermogen totaal` (`MOTORISERING`). Een id dat niet te lezen is, krijgt een `error` en lege waarden; de andere uitvoeringen komen gewoon terug.
+5. **Een paar velden van meerdere uitvoeringen** (bijvoorbeeld de instaphoogte van 10 auto's): `get_fields([id1, id2, ...], ["instaphoogte voor"])`, hoogstens 20 uitvoeringen en 10 velden per aanroep. Veel kleiner dan `get_specs` per uitvoering. Onbekende veldnamen komen terug in `unknown_fields`, met suggesties. Komt een veld in meer secties voor (`max. vermogen` in `BRANDSTOFMOTOR` én `ELEKTROMOTOR`), dan staan beide waarden in het antwoord (`"BRANDSTOFMOTOR: 607 kW (825 pk)/9250 tpm; ELEKTROMOTOR: 330 kW"`); kies er één met een sectie ervoor: `"ELEKTROMOTOR: max. vermogen"`. Waarden `n.b.` vallen daarbij weg als een andere sectie een echte waarde heeft (`actieradius` in `VERBRUIK (NEDC)` en `VERBRUIK (WLTP)`). Het gecombineerde vermogen van een hybride is `max. vermogen totaal` (`MOTORISERING`). Een id dat niet te lezen is, krijgt een `error` en lege waarden; de andere uitvoeringen komen gewoon terug.
 6. **De sterkste auto's:** Carbase kan niet op vermogen sorteren. Filter met `power_hp` (`{"min": 500}`) en lees `max. vermogen totaal` en `max. vermogen` met `get_fields`.
 
 ### Houd antwoorden klein
@@ -258,7 +258,7 @@ Handige velden: `instaphoogte voor` (INTERIEURMATEN, in mm), `topsnelheid` en `a
 
 ### Foutmeldingen en grenzen
 
-- `Unknown brand or model ...` of `Unknown model ...`: de slug klopt niet; gebruik `list_brands` of `list_models`. Let op: een model kan bij een ander merk staan dan je verwacht (de 500e staat in Carbase onder `abarth`, de elektrische Fiat 500 onder `fiat` / `500`).
+- `Unknown brand or model ...`, `Unknown brand ...` of `Unknown model ...`: de slug klopt niet; gebruik `list_brands` of `list_models`. Let op: niet elke modelnaam is een model-slug. De 500e is in Carbase een generatie van model `500` (bij `fiat` en `abarth`); zoek dan met `model="500"` en `name_contains="500e"`.
 - `No such section(s) ...`: de melding noemt de secties die er wel zijn.
 - `No specifications found for version N`: dit id bestaat niet (id's komen uit `search`).
 - `Unexpected response format from Autoweek`: de site is veranderd; meld het de gebruiker en probeer het niet opnieuw.

@@ -195,6 +195,30 @@ async def test_unknown_brand_is_a_helpful_error(fake_get):  # CR-04
         await server.list_models("nope")
 
 
+async def test_unknown_brand_with_empty_200_is_an_error(fake_get):  # e.g. /carbase/trabant/
+    makes = [{"slug": "vw", "name": "VW", "models": []}]
+    fake_get[0]["/carbase/trabant/"] = {
+        "result": [],
+        "pages": 0,
+        "filters_new": {"make_models_new": {"values": makes}},
+    }
+    with pytest.raises(ValueError, match="Unknown brand 'trabant'"):
+        await server.list_models("trabant")
+    with pytest.raises(ValueError, match="Unknown brand 'trabant'"):
+        await server.search("trabant")
+
+
+async def test_get_fields_drops_unknown_duplicates(fake_get):
+    fake_get[0]["/auto/1/x/"] = _sections_html(
+        {"VERBRUIK (NEDC)": [("actieradius", "n.b.")], "VERBRUIK (WLTP)": [("actieradius", "534 km")]}
+    )
+    fake_get[0]["/auto/2/x/"] = _sections_html(
+        {"VERBRUIK (NEDC)": [("actieradius", "n.b.")], "VERBRUIK (WLTP)": [("actieradius", "n.b.")]}
+    )
+    out = await server.get_fields([1, 2], ["actieradius"])
+    assert [r["values"]["actieradius"] for r in out["versions"]] == ["534 km", "n.b."]
+
+
 async def test_list_models(fake_get):
     makes = [{"slug": "vw", "name": "VW", "models": [{"slug": "golf", "name": "Golf", "amount": 3}]}]
     fake_get[0]["/carbase/vw/"] = _state(1, [], makes)

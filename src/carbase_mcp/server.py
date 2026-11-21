@@ -156,10 +156,12 @@ async def _state(path: str, params: dict[str, str] | None = None) -> dict:
 
 
 async def _check_model(brand: str | None, model: str | None, state: dict) -> None:
-    """Carbase answers some unknown model slugs (e.g. fiat/500e) with an empty 200 instead of 404."""
-    if not model or state.get("result"):
+    """Carbase answers some unknown slugs (trabant, fiat/500e) with an empty 200 instead of 404."""
+    if not brand or state.get("result"):
         return
-    known = {m["slug"] for m in await list_models(brand or "")}
+    known = {m["slug"] for m in await list_models(brand)}  # raises for an unknown brand
+    if not model:
+        return
     if _slug(model, "model") not in known:
         raise ValueError(f"Unknown model {model!r} for brand {brand!r}; use list_models")
 
@@ -197,6 +199,8 @@ async def list_models(brand: Brand) -> list[Entry]:
     """All models of a brand: slug, name and number of versions."""
     slug = _slug(brand, "brand")
     makes = _parse(parse.makes, await _state(_path(slug, None)))
+    if not any(m["slug"] == slug for m in makes):
+        raise ValueError(f"Unknown brand {brand!r}; use list_brands")
     return [_entry(x) for m in makes if m["slug"] == slug for x in m.get("models", [])]
 
 
@@ -425,6 +429,8 @@ def _split(field: str, labels: set[str]) -> tuple[str | None, str]:
 def _field_value(index: dict[tuple[str, str], str], field: str) -> str | None:
     section, label = _split(field, {lab for lab, _ in index})
     hits = [(s, v) for (lab, s), v in index.items() if lab == label and section in (None, s)]
+    if len(hits) > 1:  # "n.b." (unknown) adds nothing next to a real value from another section
+        hits = [h for h in hits if h[1].lower() != "n.b."] or hits[:1]
     if len(hits) <= 1:
         return hits[0][1] if hits else None
     return "; ".join(f"{s.upper()}: {v}" for s, v in hits)

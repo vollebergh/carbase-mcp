@@ -2,6 +2,13 @@
 
 Alle noemenswaardige wijzigingen. Formaat: [Keep a Changelog](https://keepachangelog.com/nl/1.1.0/), versies volgens [SemVer](https://semver.org/lang/nl/).
 
+## [0.6.1] - 2026-11-21
+
+### Opgelost
+- Een onbekend merk dat Carbase met een lege pagina beantwoordt in plaats van een 404 (bijvoorbeeld `trabant`), gaf een lege lijst; `list_models`, `search` en `list_filters` geven nu `Unknown brand ...`.
+- `get_fields`: bij een veld in meer secties vallen `n.b.`-waarden weg als een andere sectie een echte waarde heeft (`actieradius` gaf `VERBRUIK (NEDC): n.b.; VERBRUIK (WLTP): 534 km`).
+- README: de 500e is een generatie van model `500` (Fiat en Abarth), geen eigen model; de tekst noemde hem ten onrechte een Abarth-model.
+
 ## [0.6.0] - 2026-11-21
 
 ### Gewijzigd
