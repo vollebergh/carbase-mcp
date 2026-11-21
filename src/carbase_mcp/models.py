@@ -79,6 +79,7 @@ class FieldRow(TypedDict):
     title: str | None
     subtitle: str | None
     values: dict[str, str | None]
+    error: str | None  # set when this version could not be read
 
 
 class Fields(TypedDict):

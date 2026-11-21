@@ -33,7 +33,7 @@ Wat elke client nodig heeft, is dit:
 |---|---|
 | Transport | stdio (lokaal proces) |
 | Commando | `uvx` |
-| Argumenten | `--from`, `git+https://github.com/vollebergh/carbase-mcp@v0.5.2`, `carbase-mcp` |
+| Argumenten | `--from`, `git+https://github.com/vollebergh/carbase-mcp@v0.6.0`, `carbase-mcp` |
 | Omgevingsvariabelen (optioneel) | `CARBASE_MCP_CACHE_MB`, `CARBASE_MCP_CACHE_DIR`, `CARBASE_MCP_CACHE_DAYS`, zie [Hoe het werkt](#hoe-het-werkt); voor de HTTP-modus zie [ChatGPT](#chatgpt-en-andere-clients-die-alleen-externe-servers-kennen) |
 
 De clients hieronder gebruiken allemaal deze gegevens, alleen de configuratie ziet er anders uit. Herstart of herlaad de client na een wijziging, want de tools worden bij het opstarten geladen. De namen van configuratiebestanden en velden verschillen per versie van een client; controleer ze in de documentatie van je client.
@@ -41,13 +41,13 @@ De clients hieronder gebruiken allemaal deze gegevens, alleen de configuratie zi
 ### Claude Code
 
 ```bash
-claude mcp add --scope user carbase -- uvx --from git+https://github.com/vollebergh/carbase-mcp@v0.5.2 carbase-mcp
+claude mcp add --scope user carbase -- uvx --from git+https://github.com/vollebergh/carbase-mcp@v0.6.0 carbase-mcp
 ```
 
 `--scope user` maakt hem beschikbaar in al je projecten; zonder de optie geldt hij alleen voor de huidige map. Instellingen geef je mee met `-e`:
 
 ```bash
-claude mcp add --scope user carbase -e CARBASE_MCP_CACHE_MB=0 -- uvx --from git+https://github.com/vollebergh/carbase-mcp@v0.5.2 carbase-mcp
+claude mcp add --scope user carbase -e CARBASE_MCP_CACHE_MB=0 -- uvx --from git+https://github.com/vollebergh/carbase-mcp@v0.6.0 carbase-mcp
 ```
 
 ```bash
@@ -64,7 +64,7 @@ Veel clients lezen een JSON-bestand met een `mcpServers`-object (Claude Desktop:
   "mcpServers": {
     "carbase": {
       "command": "uvx",
-      "args": ["--from", "git+https://github.com/vollebergh/carbase-mcp@v0.5.2", "carbase-mcp"],
+      "args": ["--from", "git+https://github.com/vollebergh/carbase-mcp@v0.6.0", "carbase-mcp"],
       "env": { "CARBASE_MCP_CACHE_MB": "100" }
     }
   }
@@ -83,7 +83,7 @@ VS Code gebruikt de sleutel `servers` en vraagt om een `type` (in `.vscode/mcp.j
     "carbase": {
       "type": "stdio",
       "command": "uvx",
-      "args": ["--from", "git+https://github.com/vollebergh/carbase-mcp@v0.5.2", "carbase-mcp"]
+      "args": ["--from", "git+https://github.com/vollebergh/carbase-mcp@v0.6.0", "carbase-mcp"]
     }
   }
 }
@@ -100,7 +100,7 @@ In `opencode.json` (of `.jsonc`) onder `mcp`; het commando is hier één lijst:
   "mcp": {
     "carbase": {
       "type": "local",
-      "command": ["uvx", "--from", "git+https://github.com/vollebergh/carbase-mcp@v0.5.2", "carbase-mcp"],
+      "command": ["uvx", "--from", "git+https://github.com/vollebergh/carbase-mcp@v0.6.0", "carbase-mcp"],
       "environment": { "CARBASE_MCP_CACHE_MB": "100" },
       "enabled": true
     }
@@ -123,7 +123,7 @@ ChatGPT (developer mode, eigen connector) en vergelijkbare webclients starten ge
 2. Start de server met dat token en de hostnaam van je tunnel:
 
    ```bash
-   CARBASE_MCP_HTTP_TOKEN=<token> uvx --from git+https://github.com/vollebergh/carbase-mcp@v0.5.2 carbase-mcp --http --public-host mcp.example.com
+   CARBASE_MCP_HTTP_TOKEN=<token> uvx --from git+https://github.com/vollebergh/carbase-mcp@v0.6.0 carbase-mcp --http --public-host mcp.example.com
    ```
 
 3. Laat je tunnel of proxy `https://mcp.example.com` doorsturen naar `http://127.0.0.1:8000`.
@@ -141,7 +141,7 @@ Let op:
 Uit een gebouwde wheel (zie [Ontwikkelen](#ontwikkelen)) of een kloon van de repo:
 
 ```bash
-pip install builds/carbase_mcp-0.5.2-py3-none-any.whl   # of: pip install .
+pip install builds/carbase_mcp-0.6.0-py3-none-any.whl   # of: pip install .
 carbase-mcp                                              # start de stdio-server
 ```
 
@@ -173,7 +173,8 @@ Antwoord in de taal van de gebruiker. Geef waarden door zoals Carbase ze geeft e
 2. **Slug onbekend:** `list_brands()` → `list_models("toyota")`. Slugs zijn kleine letters met streepjes (`alfa-romeo`, `mercedes-benz`, `c-hr`).
 3. **Auto's zoeken op eigenschappen in de hele catalogus:** `list_filters()` voor de sleutels en opties, dan `search(filters={...}, sort="price")`.
 4. **Vergelijken:** `compare_versions([id1, id2], sections=["PRESTATIES"])` (2–5 id's; standaard alleen de verschillen).
-5. **Een paar velden van meerdere uitvoeringen** (bijvoorbeeld de instaphoogte van 10 auto's): `get_fields([id1, id2, ...], ["instaphoogte voor"])`, hoogstens 20 uitvoeringen en 10 velden per aanroep. Veel kleiner dan `get_specs` per uitvoering. Onbekende veldnamen komen terug in `unknown_fields`, met suggesties.
+5. **Een paar velden van meerdere uitvoeringen** (bijvoorbeeld de instaphoogte van 10 auto's): `get_fields([id1, id2, ...], ["instaphoogte voor"])`, hoogstens 20 uitvoeringen en 10 velden per aanroep. Veel kleiner dan `get_specs` per uitvoering. Onbekende veldnamen komen terug in `unknown_fields`, met suggesties. Komt een veld in meer secties voor (`max. vermogen` in `BRANDSTOFMOTOR` én `ELEKTROMOTOR`), dan staan beide waarden in het antwoord (`"BRANDSTOFMOTOR: 607 kW (825 pk)/9250 tpm; ELEKTROMOTOR: 330 kW"`); kies er één met een sectie ervoor: `"ELEKTROMOTOR: max. vermogen"`. Het gecombineerde vermogen van een hybride is `max. vermogen totaal` (`MOTORISERING`). Een id dat niet te lezen is, krijgt een `error` en lege waarden; de andere uitvoeringen komen gewoon terug.
+6. **De sterkste auto's:** Carbase kan niet op vermogen sorteren. Filter met `power_hp` (`{"min": 500}`) en lees `max. vermogen totaal` en `max. vermogen` met `get_fields`.
 
 ### Houd antwoorden klein
 
@@ -182,6 +183,7 @@ Een model kan meer dan 1.000 uitvoeringen hebben (Volkswagen Golf: 1.874). `sear
 - Beperk eerst: geef `brand` en liefst `model`, plus `filters` (brandstof, carrosserie, jaren, prijs) of `name_contains` (`"1.5 tsi life"`).
 - Kijk naar `total_versions`. Zijn dat er honderden, verfijn dan (of vraag de gebruiker wat hij zoekt) in plaats van te bladeren, tenzij de vraag echt om alles vraagt (bijvoorbeeld "alle waterstofauto's").
 - Verder bladeren: roep `search` opnieuw aan met **dezelfde argumenten** en `cursor=<next_cursor>`. `next_cursor` is leeg als er niets meer is. Verder bladeren kost geen extra verzoeken naar Autoweek als de pagina's in de cache staan. Eén aanroep leest hoogstens 20 Carbase-pagina's; daarna geeft hij ook een `next_cursor`, eventueel met `returned: 0` (bijvoorbeeld als `name_contains` op die pagina's niets vindt).
+- `name_contains` filtert tijdens het bladeren door alle uitvoeringen die Carbase geeft. `total_versions` telt dus de uitvoeringen vóór `name_contains`, en een volgende pagina kan weinig of geen treffers hebben. De `hint` zegt dat erbij.
 - `get_specs` is ± 7 kB (210 velden) volledig; geef `sections` mee als je maar een deel nodig hebt (± 0,6 kB per sectie).
 
 ### Zoekparameters
@@ -193,13 +195,13 @@ Een model kan meer dan 1.000 uitvoeringen hebben (Volkswagen Golf: 1.874). `sear
 | `brand`, `model` | slugs uit `list_brands` en `list_models`, bijvoorbeeld `toyota` en `rav4`; `model` vraagt een `brand` |
 | `filters` | object met filtersleutel → optie of bereik, zie hieronder. Meerdere filters zijn EN |
 | `name_contains` | woorden die allemaal in de uitvoeringsnaam moeten staan (`"1.5 tsi life"`) |
-| `sort` / `descending` | `make_model` (standaard), `price`, `year` of `power`. Sorteert de modelgeneraties (bij `price` op hun goedkoopste uitvoering) en bij `price` ook de uitvoeringen binnen een generatie. Het is **geen ranglijst over alle uitvoeringen**: een goedkopere uitvoering kan in een latere generatie zitten. Voor "de N goedkoopste" haal je er meer op (`max_versions=100`) en vergelijk je zelf de `price` |
+| `sort` / `descending` | `make_model` (standaard), `price` of `year`; meer kent Carbase niet (op vermogen sorteren kan niet, zie werkwijze 6). Bij `make_model` keert `descending` alleen de volgorde van de merken om. Sorteert de modelgeneraties (bij `price` op hun goedkoopste uitvoering) en bij `price` ook de uitvoeringen binnen een generatie. Het is **geen ranglijst over alle uitvoeringen**: een goedkopere uitvoering kan in een latere generatie zitten. Voor "de N goedkoopste" haal je er meer op (`max_versions=100`) en vergelijk je zelf de `price` |
 | `max_versions` | hoeveel uitvoeringen per antwoord, 1–500, standaard 100 |
 | `cursor` | `next_cursor` uit het vorige antwoord, om met dezelfde argumenten verder te gaan |
 
-Het antwoord is `{total_versions, returned, next_cursor, hint, generations: [{model, body, doors, years, price_from, price_to, versions: [{id, name, years, fuel, transmission, energy_label, price, bijtelling_pct}]}]}`. `total_versions` is het aantal volgens Carbase, vóór `name_contains`. `hint` is een aanwijzing hoe verder te gaan als er meer resultaten zijn, anders `null`.
+Het antwoord is `{total_versions, returned, next_cursor, hint, generations: [{model, body, doors, years, price_from, price_to, versions: [{id, name, years, fuel, transmission, energy_label, price, bijtelling_pct}]}]}`. `total_versions` is het aantal volgens Carbase, vóór `name_contains`. `hint` is een aanwijzing hoe verder te gaan als er meer resultaten zijn, of een toelichting bij `name_contains`, anders `null`.
 
-De overige tools: `list_brands` geeft `[{slug, name, versions}]`; `list_models(brand)` hetzelfde; `list_filters(brand?, model?)` geeft per filter `{key, title, type, options, steps}`, met bij `type: "options"` de lijst `options: [{value, name, count}]` en bij `type: "range"` de lijst `steps`; het andere veld is `null` (de aantallen volgen het optionele merk en model); `get_specs(version_id, sections?)` geeft `{id, title, subtitle, specs: {SECTIE: {veld: waarde}}}`; `compare_versions(version_ids, sections?, only_differences)` geeft `{versions: [...], comparison: {SECTIE: {veld: [waarde per id, null als die ontbreekt]}}}`; `get_fields(version_ids, fields)` geeft `{versions: [{id, title, subtitle, values: {veld: waarde of null}}], unknown_fields}`, met `unknown_fields: {veld: [suggesties]}` als een veldnaam nergens voorkomt, anders `null`.
+De overige tools: `list_brands` geeft `[{slug, name, versions}]`; `list_models(brand)` hetzelfde; `list_filters(brand?, model?)` geeft per filter `{key, title, type, options, steps}`, met bij `type: "options"` de lijst `options: [{value, name, count}]` en bij `type: "range"` de lijst `steps`; het andere veld is `null` (de aantallen volgen het optionele merk en model); `get_specs(version_id, sections?)` geeft `{id, title, subtitle, specs: {SECTIE: {veld: waarde}}}`; `compare_versions(version_ids, sections?, only_differences)` geeft `{versions: [...], comparison: {SECTIE: {veld: [waarde per id, null als die ontbreekt]}}}`; `get_fields(version_ids, fields)` geeft `{versions: [{id, title, subtitle, values: {veld: waarde of null}, error}], unknown_fields}`, met `error` als die uitvoering niet te lezen is (anders `null`) en `unknown_fields: {veld: [suggesties]}` als een veldnaam nergens voorkomt, anders `null`. Is geen enkele uitvoering te lezen, dan is het antwoord een fout.
 
 ### Het argument `filters`
 
@@ -222,12 +224,12 @@ Optiefilters (waarden zoals gezien in de ongefilterde catalogus; `list_filters` 
 | `door_count` | deuren | `2-3`, `4-5` |
 | `segment` | klasse | `a-mini`, `b-klein`, `c-klein-midden`, `d-midden`, `e-groot-midden`, `f-groot`, `g-sportief`, `j-lower-mpv`, `l-lower-suv`, `m-upper-suv`, `n-bestelauto`, `overig` |
 | `energy_rating` | energielabel | `a` t/m `g`, `overig` |
-| `plugin_car` | plug-in | `plug-in`, `niet-plug-in` |
+| `plugin_car` | heeft een laadstekker | `plug-in`, `niet-plug-in`. **Let op:** `plug-in` omvat ook volledig elektrische auto's; voor alleen plug-in-hybrides voeg je `fuel_type: ["elektro-benzine", "elektro-diesel"]` toe |
 | `cylinder_count` | cilinders | `2-2`, `3-3`, `4-4`, `5-5`, `6-6`, `8-8`, `10-10`, `12-12` |
 | `bijtelling_percentage` | bijtellingspercentage | `18`, `22` |
 | `entrylevel` | **instaphoogte** | `1-580` (laag, tot 58 cm), `581-680` (middel), `681-` (hoog, boven 68 cm) |
 
-Bereikfilters: `price` (euro, nieuwprijs), `year` (bouwjaar), `power_hp`, `totaltorque` (Nm), `topspeed` (km/h), `acceleration` (s, 0–100), `consumption_combined`, `co2emission`, `elekactieradius` (elektrische actieradius, km), `batterycapacity` (kWh), `electricBatteryQuickchargepower` (kW), `min_trunkspace` (l), `maxweight_trailer_brakes` (kg, geremd trekgewicht), `mass` (kg), `length` (cm), `cylinder_capacity` (cc).
+Bereikfilters gelden per uitvoering. `power_hp` is bij hybrides het gecombineerde vermogen (`max. vermogen totaal`), niet dat van de brandstof- of elektromotor alleen. Bereikfilters: `price` (euro, nieuwprijs), `year` (bouwjaar), `power_hp`, `totaltorque` (Nm), `topspeed` (km/h), `acceleration` (s, 0–100), `consumption_combined`, `co2emission`, `elekactieradius` (elektrische actieradius, km), `batterycapacity` (kWh), `electricBatteryQuickchargepower` (kW), `min_trunkspace` (l), `maxweight_trailer_brakes` (kg, geremd trekgewicht), `mass` (kg), `length` (cm), `cylinder_capacity` (cc).
 
 Voorbeelden van aanroepen:
 
@@ -240,7 +242,7 @@ Voorbeelden van aanroepen:
 
 ### Specificaties
 
-`get_specs` groepeert ± 200 velden in secties. De sectienamen zijn Nederlandse hoofdletters: `BASISKENMERKEN` (prijzen, onder andere `nieuwprijs fiscaal` en `rijklaar`), `MOTORISERING`, `BRANDSTOFMOTOR` of `ELEKTROMOTOR`, `PRESTATIES`, `VERBRUIK (WLTP)` (oudere auto's ook `VERBRUIK (NEDC)`), `ONDERSTEL`, `GEWICHTEN`, `BAGAGE/LAADRUIMTE`, `EXTERIEURMATEN`, `INTERIEURMATEN`, `VEILIGHEID`, `COMFORT`, `INTERIEUR`, `EXTERIEUR` (met optieprijzen), `SERVICE & GARANTIE`, `HISTORISCHE NIEUWPRIJZEN`. Welke secties er zijn, verschilt per uitvoering. Het argument `sections` vergelijkt namen exact, maar zonder hoofdletterverschil; een onbekende naam geeft een fout met de beschikbare secties.
+`get_specs` groepeert ± 200 velden in secties. De sectienamen zijn Nederlandse hoofdletters: `BASISKENMERKEN` (prijzen, onder andere `nieuwprijs fiscaal` en `rijklaar`), `MOTORISERING` (bij hybrides met `max. vermogen totaal`), `BRANDSTOFMOTOR` en/of `ELEKTROMOTOR` (inclusief accu en laden; een aparte sectie `ACCU` bestaat niet), `PRESTATIES`, `VERBRUIK (WLTP)` (oudere auto's ook `VERBRUIK (NEDC)`), `ONDERSTEL`, `GEWICHTEN`, `BAGAGE/LAADRUIMTE`, `EXTERIEURMATEN`, `INTERIEURMATEN`, `VEILIGHEID`, `COMFORT`, `INTERIEUR`, `EXTERIEUR` (met optieprijzen), `SERVICE & GARANTIE`, `HISTORISCHE NIEUWPRIJZEN`. Welke secties er zijn, verschilt per uitvoering. Het argument `sections` vergelijkt namen exact, maar zonder hoofdletterverschil. Bij `get_specs` geeft elke naam die de uitvoering niet heeft een fout met de beschikbare secties, ook als de andere namen wel bestaan. Bij `compare_versions` mag een sectie in een deel van de uitvoeringen ontbreken (`ELEKTROMOTOR` bij een benzineauto; die waarden zijn dan `null`), maar niet in alle.
 
 Waarden zijn teksten in Nederlandse notatie: `1.204 kg` (punt = duizendtal), `9,9 s` (komma = decimalen), `715 mm`, `€ 36.870`, `ja`/`nee`. Reken ze om voordat je getallen vergelijkt.
 
@@ -256,7 +258,7 @@ Handige velden: `instaphoogte voor` (INTERIEURMATEN, in mm), `topsnelheid` en `a
 
 ### Foutmeldingen en grenzen
 
-- `Unknown brand or model ...`: de slug klopt niet; gebruik `list_brands` of `list_models`.
+- `Unknown brand or model ...` of `Unknown model ...`: de slug klopt niet; gebruik `list_brands` of `list_models`. Let op: een model kan bij een ander merk staan dan je verwacht (de 500e staat in Carbase onder `abarth`, de elektrische Fiat 500 onder `fiat` / `500`).
 - `No such section(s) ...`: de melding noemt de secties die er wel zijn.
 - `No specifications found for version N`: dit id bestaat niet (id's komen uit `search`).
 - `Unexpected response format from Autoweek`: de site is veranderd; meld het de gebruiker en probeer het niet opnieuw.

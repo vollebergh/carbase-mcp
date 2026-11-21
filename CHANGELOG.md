@@ -2,6 +2,21 @@
 
 Alle noemenswaardige wijzigingen. Formaat: [Keep a Changelog](https://keepachangelog.com/nl/1.1.0/), versies volgens [SemVer](https://semver.org/lang/nl/).
 
+## [0.6.0] - 2026-11-21
+
+### Gewijzigd
+- `search`: `sort="power"` vervalt. Carbase kent alleen sorteren op merk/model, bouwjaar en prijs en negeerde `vermogen` stilzwijgend, zodat de volgorde niets met vermogen te maken had. Voor de sterkste auto's: filter `power_hp` en lees het vermogen met `get_fields`.
+- `get_fields`: een veld dat in meer secties voorkomt (`max. vermogen` in `BRANDSTOFMOTOR` en `ELEKTROMOTOR`) gaf de waarde van de laatste sectie; nu staan alle waarden met hun sectie in het antwoord. Een sectie ervoor kiest er één: `"ELEKTROMOTOR: max. vermogen"`.
+- `get_fields`: een onleesbaar versie-id laat niet langer de hele aanroep falen; die uitvoering krijgt een `error` (nieuw veld, anders `null`) en lege waarden. Alleen als geen enkele uitvoering te lezen is, volgt een fout.
+
+### Opgelost
+- `get_specs` negeerde een onbekende sectienaam als er ook een geldige bij stond; nu geeft elke onbekende naam een fout met de beschikbare secties. `compare_versions` accepteert een sectie die in een deel van de uitvoeringen ontbreekt, maar niet een die in geen enkele voorkomt.
+- Een onbekend model dat Carbase met een lege pagina beantwoordt in plaats van een 404 (bijvoorbeeld `fiat`/`500e`), geeft nu `Unknown model ...` in `search` en `list_filters` in plaats van een leeg resultaat.
+- `search` met `name_contains`: de `hint` legt uit dat `total_versions` vóór `name_contains` telt en dat een volgende pagina weinig treffers kan hebben.
+
+### Documentatie
+- README en tool-beschrijvingen: `plugin_car="plug-in"` omvat ook volledig elektrische auto's; bereikfilters gelden per uitvoering en `power_hp` is bij hybrides het gecombineerde vermogen; `ELEKTROMOTOR` bevat accu en laden (geen sectie `ACCU`); werkwijze voor "de sterkste auto's".
+
 ## [0.5.2] - 2026-11-19
 
 ### Opgelost

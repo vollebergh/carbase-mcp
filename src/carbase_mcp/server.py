@@ -13,7 +13,7 @@ from pydantic import Field
 from . import __version__, parse, serve
 from .cache import DiskCache
 from .client import CarbaseClient, CarbaseError, NotFoundError
-from .models import Comparison, Entry, Fields, SearchFilter, SearchResult, Specs
+from .models import Comparison, Entry, FieldRow, Fields, SearchFilter, SearchResult, Specs
 
 # Carbase filter key (as in the JSON "filters_new") -> URL parameter name, taken from
 # Autoweek's search-client bundle. Keys not listed here are internal and not exposed.
@@ -48,7 +48,8 @@ FILTER_PARAMS = {
     "cylinder_capacity": "cilinderinhoud",
 }
 SLUG = re.compile(r"^[a-z0-9]+(?:-+[a-z0-9]+)*-?$")
-SORT = {"make_model": "merkmodel", "price": "prijs", "year": "bouwjaar", "power": "vermogen"}
+# The only sort orders Carbase supports (its "sorting.types"); any other value is silently ignored.
+SORT = {"make_model": "merkmodel", "price": "prijs", "year": "bouwjaar"}
 MAX_PAGES = 20  # Carbase pages (20 generations each) read per search call
 DEFAULT_VERSIONS = 100
 MAX_VERSIONS = 500
@@ -154,17 +155,30 @@ async def _state(path: str, params: dict[str, str] | None = None) -> dict:
     return state
 
 
-async def _specs(version_id: int, sections: list[str] | None) -> Specs:
+async def _check_model(brand: str | None, model: str | None, state: dict) -> None:
+    """Carbase answers some unknown model slugs (e.g. fiat/500e) with an empty 200 instead of 404."""
+    if not model or state.get("result"):
+        return
+    known = {m["slug"] for m in await list_models(brand or "")}
+    if _slug(model, "model") not in known:
+        raise ValueError(f"Unknown model {model!r} for brand {brand!r}; use list_models")
+
+
+async def _specs(version_id: int, sections: list[str] | None = None) -> Specs:
     data = _parse(parse.specs_page, await client.get(_urls.get(version_id, f"/auto/{version_id}/x/")))
     if not data["specs"]:
         raise CarbaseError(f"No specifications found for version {version_id}")
     if sections:
-        wanted = {s.lower() for s in sections}
-        kept = {k: v for k, v in data["specs"].items() if k.lower() in wanted}
-        if not kept:
-            raise ValueError(f"No such section(s) {sections}; available: {list(data['specs'])}")
-        data["specs"] = kept
+        available = {k.lower() for k in data["specs"]}
+        if missing := [s for s in sections if s.lower() not in available]:
+            raise ValueError(f"No such section(s) {missing}; available: {list(data['specs'])}")
+        data["specs"] = _keep(data["specs"], sections)
     return {"id": version_id, **data}
+
+
+def _keep(specs: dict[str, dict[str, str]], sections: list[str]) -> dict[str, dict[str, str]]:
+    wanted = {s.lower() for s in sections}
+    return {k: v for k, v in specs.items() if k.lower() in wanted}
 
 
 Brand = Annotated[str, Field(description="Brand slug from list_brands, e.g. 'volkswagen'")]
@@ -195,7 +209,9 @@ async def list_filters(brand: Brand | None = None, model: Model = None) -> list[
     entrylevel (instaphoogte), segment, price, year, power_hp, elekactieradius (km),
     min_trunkspace (l), maxweight_trailer_brakes (kg).
     """
-    return _parse(parse.filters, await _state(_path(brand, model)), FILTER_PARAMS)
+    state = await _state(_path(brand, model))
+    await _check_model(brand, model, state)
+    return _parse(parse.filters, state, FILTER_PARAMS)
 
 
 @mcp.tool()
@@ -204,7 +220,7 @@ async def search(
     model: Model = None,
     filters: dict[str, Any] | None = None,
     name_contains: str | None = None,
-    sort: Literal["make_model", "price", "year", "power"] = "make_model",
+    sort: Literal["make_model", "price", "year"] = "make_model",
     descending: bool = False,
     max_versions: Annotated[int, Field(ge=1, le=MAX_VERSIONS)] = DEFAULT_VERSIONS,
     cursor: str | None = None,
@@ -214,10 +230,15 @@ async def search(
     filters: filter key -> option value(s) or a range, keys and values from list_filters.
       e.g. {"fuel_type": ["elektrisch", "elektro-benzine"], "body": "suv",
             "price": {"max": 40000}, "year": {"min": 2022}}
+    Range filters (power_hp, price, ...) apply per version. plugin_car="plug-in" means
+      "has a charging plug": fully electric cars as well as plug-in hybrids; for plug-in
+      hybrids only add fuel_type ["elektro-benzine", "elektro-diesel"].
     name_contains: keep only versions whose name contains all these words ("1.5 tsi").
     sort: orders model generations (for "price": by their cheapest version) and, with "price",
       the versions inside each generation. It is not a global ranking of versions: for "the N
-      cheapest", fetch more (e.g. max_versions=100) and compare the prices.
+      cheapest", fetch more (e.g. max_versions=100) and compare the prices. Carbase cannot sort
+      by power: for "the most powerful", filter on power_hp and read "max. vermogen totaal" /
+      "max. vermogen" with get_fields.
     cursor: next_cursor from a previous call with the same arguments, to continue.
 
     Returns total_versions (Carbase's count, before name_contains), returned, next_cursor
@@ -236,6 +257,8 @@ async def search(
     returned, total, next_cursor = 0, None, None
     for pages_read in range(1, MAX_PAGES + 1):
         state = await _state(path, _page(params, page))
+        if pages_read == 1:
+            await _check_model(brand, model, state)
         total = state.get("total_amount") if total is None else total
         index = 0  # position in this page's (filtered, sorted) sequence of versions
         for gen in _parse(parse.generations, state):
@@ -268,10 +291,21 @@ async def search(
         "generations": found,
         "hint": None,
     }
-    if next_cursor:
+    if next_cursor and words:
+        result["hint"] = (
+            f"name_contains is applied while paging through Carbase's {total} versions, so a page "
+            f"can hold few or no matches. More may follow: call search again with the same "
+            f"arguments and cursor={next_cursor!r}, or narrow with filters."
+        )
+    elif next_cursor:
         result["hint"] = (
             f"More results: call search again with the same arguments and cursor={next_cursor!r}, "
             "or narrow with filters or name_contains."
+        )
+    elif words and total != returned:
+        result["hint"] = (
+            f"No further matches. total_versions ({total}) counts Carbase's versions before "
+            f"name_contains; only those containing {name_contains!r} are returned."
         )
     return result
 
@@ -280,10 +314,12 @@ async def search(
 async def get_specs(version_id: Annotated[int, Field(gt=0)], sections: Sections = None) -> Specs:
     """Full specifications of one version (id from search), grouped per section, Dutch labels.
 
-    Sections: BASISKENMERKEN (prices), MOTORISERING, BRANDSTOFMOTOR or ELEKTROMOTOR/ACCU,
-    PRESTATIES, VERBRUIK (WLTP), ONDERSTEL, GEWICHTEN, BAGAGE/LAADRUIMTE, EXTERIEURMATEN,
+    Sections: BASISKENMERKEN (prices), MOTORISERING (incl. system power of hybrids),
+    BRANDSTOFMOTOR and/or ELEKTROMOTOR (incl. battery and charging), PRESTATIES,
+    VERBRUIK (WLTP) or (NEDC), ONDERSTEL, GEWICHTEN, BAGAGE/LAADRUIMTE, EXTERIEURMATEN,
     INTERIEURMATEN (incl. instaphoogte), VEILIGHEID, COMFORT, INTERIEUR, EXTERIEUR,
-    SERVICE & GARANTIE, HISTORISCHE NIEUWPRIJZEN.
+    SERVICE & GARANTIE, HISTORISCHE NIEUWPRIJZEN. Names match case-insensitively; any
+    section this version lacks is an error that lists the available ones.
     """
     return await _specs(version_id, sections)
 
@@ -296,9 +332,16 @@ async def compare_versions(
 ) -> Comparison:
     """Compare 2-5 versions: per section and field, the values in version_ids order.
 
-    only_differences drops fields that are equal for all versions.
+    only_differences drops fields that are equal for all versions. A section may be missing
+    in some versions (ELEKTROMOTOR in a petrol car), but not in all of them.
     """
-    cars = [await _specs(v, sections) for v in version_ids]
+    cars = [await _specs(v) for v in version_ids]
+    if sections:
+        available = {k.lower(): k for car in cars for k in car["specs"]}
+        if missing := [s for s in sections if s.lower() not in available]:
+            raise ValueError(f"No such section(s) {missing}; available: {list(available.values())}")
+        for car in cars:
+            car["specs"] = _keep(car["specs"], sections)
     table: dict[str, dict[str, list[str | None]]] = {}
     for i, car in enumerate(cars):
         for section, fields in car["specs"].items():
@@ -320,33 +363,71 @@ async def get_fields(
     """A few specification fields for up to 20 versions, e.g. the step-in height of 10 cars.
 
     fields: field labels as get_specs shows them, matched case-insensitively in any section,
-      e.g. ["instaphoogte voor", "inhoud", "gewicht leeg"].
+      e.g. ["instaphoogte voor", "inhoud", "gewicht leeg"]. Prefix a section to pick one when a
+      label occurs in several: "ELEKTROMOTOR: max. vermogen". Without a prefix such a value
+      reads "BRANDSTOFMOTOR: 607 kW (825 pk); ELEKTROMOTOR: 330 kW". A hybrid's combined power
+      is "max. vermogen totaal".
     Returns per version its title and the value of each field (null when Carbase has none),
     plus unknown_fields with close label suggestions when a label exists in none of them.
+    A version id that cannot be read gets an error and null values; the others are returned.
     Much smaller than get_specs or compare_versions for this purpose.
     """
-    wanted = {_label(f): f for f in fields}
-    rows, labels = [], set()
+    rows: list[FieldRow] = []
+    labels: set[str] = set()
     for vid in version_ids:
-        car = await _specs(vid, None)
-        flat = {_label(k): v for section in car["specs"].values() for k, v in section.items()}
-        labels |= flat.keys()
+        try:
+            car = await _specs(vid)
+        except CarbaseError as exc:
+            rows.append(
+                {
+                    "id": vid,
+                    "title": None,
+                    "subtitle": None,
+                    "values": dict.fromkeys(fields),
+                    "error": str(exc),
+                }
+            )
+            continue
+        index = _field_index(car["specs"])
+        labels |= {label for label, _ in index}
+        values = {f: _field_value(index, f) for f in fields}
         rows.append(
-            {
-                "id": vid,
-                "title": car["title"],
-                "subtitle": car["subtitle"],
-                "values": {f: flat.get(key) for key, f in wanted.items()},
-            }
+            {"id": vid, "title": car["title"], "subtitle": car["subtitle"], "values": values, "error": None}
         )
-    unknown = {
-        f: difflib.get_close_matches(key, labels, n=3) for key, f in wanted.items() if key not in labels
+    if all(row["error"] for row in rows):
+        raise CarbaseError("; ".join(row["error"] or "" for row in rows))
+    unknown = {  # found in none of the versions (with the section, if one was given)
+        f: difflib.get_close_matches(_split(f, labels)[1], labels, n=3)
+        for f in fields
+        if all(row["values"][f] is None for row in rows)
     }
     return {"versions": rows, "unknown_fields": unknown or None}
 
 
 def _label(text: str) -> str:
     return " ".join(text.lower().split())
+
+
+def _field_index(specs: dict[str, dict[str, str]]) -> dict[tuple[str, str], str]:
+    """(label, section) -> value, both lower-cased and whitespace-normalised."""
+    return {(_label(k), _label(s)): v for s, fields in specs.items() for k, v in fields.items()}
+
+
+def _split(field: str, labels: set[str]) -> tuple[str | None, str]:
+    """'SECTIE: veld' -> (section, label); labels may contain ': ' themselves, so a whole match wins."""
+    label = _label(field)
+    if label not in labels and ": " in label:
+        section, rest = label.split(": ", 1)
+        return section, rest
+    return None, label
+
+
+def _field_value(index: dict[tuple[str, str], str], field: str) -> str | None:
+    section, label = _split(field, {lab for lab, _ in index})
+    hits = [(s, v) for (lab, s), v in index.items() if lab == label and section in (None, s)]
+    if len(hits) <= 1:
+        return hits[0][1] if hits else None
+    return "; ".join(f"{s.upper()}: {v}" for s, v in hits)
 
 
 def main(argv: list[str] | None = None) -> None:

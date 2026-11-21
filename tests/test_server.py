@@ -45,7 +45,7 @@ def test_filter_params_rejects(bad):
 
 
 async def test_compare_only_differences(monkeypatch):
-    async def fake_specs(version_id, sections):
+    async def fake_specs(version_id, sections=None):
         return {
             "id": version_id,
             "title": f"car {version_id}",
@@ -209,6 +209,51 @@ async def test_unknown_section_lists_available(fake_get):  # CR-05
     with pytest.raises(ValueError, match="PRESTATIES"):
         await server.get_specs(7, ["Interieur maten"])
     assert (await server.get_specs(7, ["prestaties"]))["specs"] == {"PRESTATIES": {"a": "b"}}
+    with pytest.raises(ValueError, match=r"\['nope'\].*PRESTATIES"):  # one unknown among valid ones
+        await server.get_specs(7, ["prestaties", "nope"])
+
+
+async def test_compare_sections_may_be_missing_in_some_versions(fake_get):
+    fake_get[0]["/auto/1/x/"] = _sections_html({"ELEKTROMOTOR": [("max. vermogen", "150 kW")]})
+    fake_get[0]["/auto/2/x/"] = _sections_html({"BRANDSTOFMOTOR": [("max. vermogen", "110 kW")]})
+    out = await server.compare_versions([1, 2], ["elektromotor", "brandstofmotor"])
+    assert out["comparison"] == {
+        "ELEKTROMOTOR": {"max. vermogen": ["150 kW", None]},
+        "BRANDSTOFMOTOR": {"max. vermogen": [None, "110 kW"]},
+    }
+    with pytest.raises(ValueError, match=r"\['accu'\]"):
+        await server.compare_versions([1, 2], ["elektromotor", "accu"])
+
+
+def test_power_is_not_a_sort_order():  # Carbase ignores sorterenop=vermogen
+    assert "power" not in server.SORT
+
+
+async def test_unknown_model_with_empty_200_is_an_error(fake_get):
+    responses, _ = fake_get
+    makes = [{"slug": "fiat", "name": "Fiat", "models": [{"slug": "500", "name": "500", "amount": 9}]}]
+    responses["/carbase/fiat/500e/"] = {
+        "result": [],
+        "pages": 0,
+        "filters_new": {"make_models_new": {"values": makes}},
+    }
+    responses["/carbase/fiat/"] = _state(1, [_v(1)], makes)
+    with pytest.raises(ValueError, match="list_models"):
+        await server.search("fiat", "500e")
+    with pytest.raises(ValueError, match="list_models"):
+        await server.list_filters("fiat", "500e")
+    responses["/carbase/fiat/500/"] = {
+        "result": [],
+        "pages": 0,
+        "filters_new": {"make_models_new": {"values": makes}},
+    }
+    assert (await server.search("fiat", "500", {"fuel_type": "waterstof"}))["generations"] == []
+
+
+async def test_name_contains_hint_explains_total(fake_get):
+    fake_get[0]["/carbase/"] = _state(1, [_v(1, "Golf 1.5 TSI"), _v(2, "Golf 2.0 TDI")])
+    out = await server.search(name_contains="tsi")
+    assert out["returned"] == 1 and out["next_cursor"] is None and "before name_contains" in out["hint"]
 
 
 SPEC = '<section class="table-description"><h3>A</h3><table><tr><td>a</td><td>b</td></tr></table></section>'
@@ -256,6 +301,47 @@ async def test_get_fields_suggests_labels(fake_get):  # B-10
     out = await server.get_fields([1], ["instap hoogte"])
     assert out["unknown_fields"] == {"instap hoogte": ["instaphoogte voor"]}
     assert out["versions"][0]["values"] == {"instap hoogte": None}
+
+
+def _sections_html(sections):
+    body = "".join(
+        f'<section class="table-description"><h3>{name}</h3><table>'
+        + "".join(f"<tr><td>{k}</td><td>{v}</td></tr>" for k, v in rows)
+        + "</table></section>"
+        for name, rows in sections.items()
+    )
+    return f"<h1>car</h1>{body}"
+
+
+async def test_get_fields_label_in_several_sections(fake_get):
+    fake_get[0]["/auto/1/x/"] = _sections_html(
+        {
+            "BRANDSTOFMOTOR": [("max. vermogen", "607 kW")],
+            "ELEKTROMOTOR": [("max. vermogen", "330 kW"), ("bidirectioneel laden: V2L", "nee")],
+        }
+    )
+    out = await server.get_fields(
+        [1],
+        ["max. vermogen", "elektromotor: Max. vermogen", "bidirectioneel laden: V2L", "accu: max. vermogen"],
+    )
+    assert out["versions"][0]["values"] == {
+        "max. vermogen": "BRANDSTOFMOTOR: 607 kW; ELEKTROMOTOR: 330 kW",
+        "elektromotor: Max. vermogen": "330 kW",
+        "bidirectioneel laden: V2L": "nee",
+        "accu: max. vermogen": None,
+    }
+    assert out["unknown_fields"] == {"accu: max. vermogen": ["max. vermogen"]}
+
+
+async def test_get_fields_keeps_going_past_a_bad_id(fake_get):
+    fake_get[0]["/auto/1/x/"] = _spec_html([("instaphoogte voor", "715 mm")])
+    fake_get[0]["/auto/2/x/"] = "<h1>nothing</h1>"
+    out = await server.get_fields([1, 2], ["instaphoogte voor"])
+    good, bad = out["versions"]
+    assert good["values"] == {"instaphoogte voor": "715 mm"} and good["error"] is None
+    assert bad["values"] == {"instaphoogte voor": None} and "version 2" in bad["error"]
+    with pytest.raises(server.CarbaseError, match="version 2"):
+        await server.get_fields([2], ["instaphoogte voor"])
 
 
 async def _call(name, args):
